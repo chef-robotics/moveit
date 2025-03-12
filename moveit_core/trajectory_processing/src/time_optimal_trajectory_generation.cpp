@@ -1066,7 +1066,12 @@ bool TimeOptimalTrajectoryGeneration::hasMixedJointTypes(const moveit::core::Joi
 
 double TimeOptimalTrajectoryGeneration::verifyScalingFactor(const double requested_scaling_factor) const
 {
-  double scaling_factor = std::clamp(requested_scaling_factor, 1e-7, 1.0);
+  // Using a ternary instead of std::clamp because MoveIt Melodic is built with C++14,
+  // and std::clamp was introduced in C++17.
+  double scaling_factor = (requested_scaling_factor < 1e-7) ? 1e-7
+                        : (requested_scaling_factor > 1.0) ? 1.0
+                        : requested_scaling_factor;
+
   if (requested_scaling_factor != scaling_factor)
   {
     ROS_WARN_NAMED(LOGNAME, "Invalid max_scaling_factor specified: %f, reverting to %f instead.",
