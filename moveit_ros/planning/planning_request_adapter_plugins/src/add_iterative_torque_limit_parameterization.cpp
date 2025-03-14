@@ -66,7 +66,7 @@ public:
       ROS_DEBUG("Running '%s'", getDescription().c_str());
       // TODO(cj): Extend MotionPlanRequest msg to support ITLP -- needs: gravity vector, external wrenches,
       // joint torque limits, acceleration limit decrement factor, velocity limits, and acceleration limits.
-      ROS_WARN("Using TOTG because ITLP cannot be configured from a MotionPlanRequest message!")
+      ROS_WARN("Using TOTG because ITLP cannot be configured from a MotionPlanRequest message!");
       TimeOptimalTrajectoryGeneration totg;
       if (!totg.computeTimeStamps(*res.trajectory_, req.max_velocity_scaling_factor,
                                   req.max_acceleration_scaling_factor))

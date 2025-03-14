@@ -587,14 +587,14 @@ public:
           trajectory_processing::IterativeParabolicTimeParameterization time_param;
           time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
         }
-        else if (algorithm == "iterative_torque_limit_parameterization")
-        {
-          trajectory_processing::IterativeTorqueLimitParameterization time_param;
-          time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
-        }
         else if (algorithm == "iterative_spline_parameterization")
         {
           trajectory_processing::IterativeSplineParameterization time_param;
+          time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+        }
+        else if (algorithm == "iterative_torque_limit_parameterization")
+        {
+          trajectory_processing::IterativeTorqueLimitParameterization time_param;
           geometry_msgs::Vector3 gravity_vector_msg;
           py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector_msg);
           std::vector<geometry_msgs::Wrench> external_link_wrenches;
