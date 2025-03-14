@@ -32,7 +32,7 @@
 #
 # Author: Ioan Sucan, William Baker
 
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, Vector3, Wrench
 from moveit_msgs.msg import (
     RobotTrajectory,
     Grasp,
@@ -733,15 +733,36 @@ class MoveGroupCommander(object):
         velocity_scaling_factor=1.0,
         acceleration_scaling_factor=1.0,
         algorithm="iterative_time_parameterization",
+        gravity_vector=Vector3(x=0.0, y=0.0, z=-9.81),
+        external_link_wrenches=None,
+        joint_torque_limits=None,
+        accel_limit_decrement_factor=0.1,
     ):
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
+        ser_gravity_vector = conversions.msg_to_string(gravity_vector)
+        if external_link_wrenches is None:
+            zero_wrench = Wrench(
+                force=Vector3(0.0, 0.0, 0.0), torque=Vector3(0.0, 0.0, 0.0)
+            )
+            external_link_wrenches = [zero_wrench] * len(
+                self.get_active_joints()
+            )
+        ser_external_link_wrenches = [
+            conversions.msg_to_string(w) for w in external_link_wrenches
+        ]
+        if joint_torque_limits is None:
+            joint_torque_limits = []
         ser_traj_out = self._g.retime_trajectory(
             ser_ref_state_in,
             ser_traj_in,
             velocity_scaling_factor,
             acceleration_scaling_factor,
             algorithm,
+            ser_gravity_vector,
+            ser_external_link_wrenches,
+            joint_torque_limits,
+            accel_limit_decrement_factor,
         )
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)
