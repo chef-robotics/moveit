@@ -6,9 +6,10 @@ set(SOURCE_FILES
   src/fix_start_state_collision.cpp
   src/fix_start_state_path_constraints.cpp
   src/fix_workspace_bounds.cpp
-  src/add_time_parameterization.cpp
   src/add_iterative_spline_parameterization.cpp
-  src/add_time_optimal_parameterization.cpp)
+  src/add_iterative_iterative_torque_limit_parameterization.cpp
+  src/add_time_optimal_parameterization.cpp
+  src/add_time_parameterization.cpp)
 
 add_library(${MOVEIT_LIB_NAME} ${SOURCE_FILES})
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
