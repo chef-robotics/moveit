@@ -564,7 +564,7 @@ public:
                                                  const py_bindings_tools::ByteString& gravity_vector_str,
                                                  const bp::list& external_link_wrenches_list,
                                                  const bp::list& joint_torque_limits_list,
-                                                 const double accel_limit_decrement_factor)
+                                                 double accel_limit_decrement_factor)
   {
     // Convert reference state message to object
     moveit_msgs::RobotState ref_state_msg;
@@ -576,6 +576,25 @@ public:
       moveit_msgs::RobotTrajectory traj_msg;
       py_bindings_tools::deserializeMsg(traj_str, traj_msg);
       bool algorithm_found = true;
+
+      geometry_msgs::Vector3 gravity_vector_msg;
+      std::vector<geometry_msgs::Wrench> external_link_wrenches;
+      std::vector<double> joint_torque_limits;
+      if (algorithm == "iterative_torque_limit_parameterization")
+      {
+        py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector_msg);
+
+        if (bp::len(external_link_wrenches_list) == 0) {
+          const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(getName());
+          external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
+        }
+        else {
+          convertListToArrayOfWrenches(external_link_wrenches_list, external_link_wrenches);
+        }
+
+        joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_list);
+      }
+
       {
         GILReleaser gr;
         robot_trajectory::RobotTrajectory traj_obj(getRobotModel(), getName());
@@ -595,11 +614,6 @@ public:
         else if (algorithm == "iterative_torque_limit_parameterization")
         {
           trajectory_processing::IterativeTorqueLimitParameterization time_param;
-          geometry_msgs::Vector3 gravity_vector_msg;
-          py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector_msg);
-          std::vector<geometry_msgs::Wrench> external_link_wrenches;
-          convertListToArrayOfWrenches(external_link_wrenches_list, external_link_wrenches);
-          std::vector<double> joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_list);
           std::unordered_map<std::string, double> empty;
           time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector_msg, external_link_wrenches,
                                                        joint_torque_limits, accel_limit_decrement_factor,

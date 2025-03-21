@@ -741,15 +741,8 @@ class MoveGroupCommander(object):
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
         ser_gravity_vector = conversions.msg_to_string(gravity_vector)
-        if external_link_wrenches is None:
-            zero_wrench = Wrench(
-                force=Vector3(0.0, 0.0, 0.0), torque=Vector3(0.0, 0.0, 0.0)
-            )
-            external_link_wrenches = [zero_wrench] * len(
-                self.get_active_joints()
-            )
         ser_external_link_wrenches = [
-            conversions.msg_to_string(w) for w in external_link_wrenches
+            conversions.msg_to_string(w) for w in external_link_wrenches or []
         ]
         if joint_torque_limits is None:
             joint_torque_limits = []
