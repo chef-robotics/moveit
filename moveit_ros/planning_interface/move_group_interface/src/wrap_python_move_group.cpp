@@ -577,12 +577,13 @@ public:
       py_bindings_tools::deserializeMsg(traj_str, traj_msg);
       bool algorithm_found = true;
 
-      geometry_msgs::Vector3 gravity_vector_msg;
+      // Conversions for ITLP; need to do these before GIL is released.
+      geometry_msgs::Vector3 gravity_vector;
       std::vector<geometry_msgs::Wrench> external_link_wrenches;
       std::vector<double> joint_torque_limits;
       if (algorithm == "iterative_torque_limit_parameterization")
       {
-        py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector_msg);
+        py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector);
 
         if (bp::len(external_link_wrenches_list) == 0) {
           const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(getName());
@@ -615,7 +616,7 @@ public:
         {
           trajectory_processing::IterativeTorqueLimitParameterization time_param;
           std::unordered_map<std::string, double> empty;
-          time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector_msg, external_link_wrenches,
+          time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
                                                        joint_torque_limits, accel_limit_decrement_factor,
                                                        empty, empty, velocity_scaling_factor,
                                                        acceleration_scaling_factor);
