@@ -32,6 +32,9 @@
 #
 # Author: Ioan Sucan, William Baker
 
+from typing import List
+from typing import Optional
+
 from geometry_msgs.msg import Pose, PoseStamped, Vector3, Wrench
 from moveit_msgs.msg import (
     RobotTrajectory,
@@ -728,16 +731,17 @@ class MoveGroupCommander(object):
 
     def retime_trajectory(
         self,
-        ref_state_in,
-        traj_in,
-        velocity_scaling_factor=1.0,
-        acceleration_scaling_factor=1.0,
-        algorithm="iterative_time_parameterization",
-        gravity_vector=Vector3(x=0.0, y=0.0, z=-9.81),
-        external_link_wrenches=None,
-        joint_torque_limits=None,
-        accel_limit_decrement_factor=0.1,
+        ref_state_in,  # type: RobotState
+        traj_in,  # type: RobotTrajectory
+        velocity_scaling_factor=1.0,  # type: float
+        acceleration_scaling_factor=1.0,  # type: float
+        algorithm="iterative_time_parameterization",  # type: str
+        gravity_vector=Vector3(x=0.0, y=0.0, z=-9.81),  # type: Vector3
+        external_link_wrenches=None,  # type: Optional[List[Wrench]]
+        joint_torque_limits=None,  # type: Optional[List[float]]
+        accel_limit_decrement_factor=0.1,  # type: float
     ):
+        # type: (...) -> RobotTrajectory
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
         ser_gravity_vector = conversions.msg_to_string(gravity_vector)

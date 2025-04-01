@@ -57,7 +57,7 @@ public:
    * time-parameterized; this function will re-time-parameterize it.
    * \param gravity_vector For example, (0, 0, -9.81). Units are m/s^2
    * \param external_link_wrenches Externally-applied wrenches on each link. TODO(andyz): what frame is this in?
-   * \param joint_torque_limits Torque limits for each joint in N*m. Should all be >0. TODO(cj): Populate from robot
+   * \param joint_torque_limits Torque limits for each joint in N*m. All should be >0. TODO(cj): Populate from robot
    *   description.
    * \param accel_limit_decrement_factor Typically in the range [0.01-0.1].
    * This affects how fast acceleration limits are decreased while searching for a solution. Time-optimality
