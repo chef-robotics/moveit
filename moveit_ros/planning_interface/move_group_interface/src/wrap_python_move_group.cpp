@@ -42,6 +42,7 @@
 #include <moveit/robot_state/conversions.h>
 #include <moveit/robot_trajectory/robot_trajectory.h>
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/trajectory_processing/iterative_torque_limit_parameterization.h>
 #include <moveit/trajectory_processing/iterative_spline_parameterization.h>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 #include <tf2_eigen/tf2_eigen.h>
@@ -543,10 +544,27 @@ public:
     return py_bindings_tools::serializeMsg(constraints_msg);
   }
 
+  // Convert a Python list of deserialized wrench messages to std::vector<geometry_msgs::Wrench>
+  void convertListToArrayOfWrenches(const bp::list& wrenches, std::vector<geometry_msgs::Wrench>& result) {
+    int len = bp::len(wrenches);
+    result.reserve(len);
+    for (int i = 0; i < len; ++i) {
+      const py_bindings_tools::ByteString& wrench_str = bp::extract<py_bindings_tools::ByteString>(wrenches[i]);
+      geometry_msgs::Wrench wrench_msg;
+      py_bindings_tools::deserializeMsg(wrench_str, wrench_msg);
+      result.push_back(wrench_msg);
+    }
+  }
+
   py_bindings_tools::ByteString retimeTrajectory(const py_bindings_tools::ByteString& ref_state_str,
                                                  const py_bindings_tools::ByteString& traj_str,
                                                  double velocity_scaling_factor, double acceleration_scaling_factor,
-                                                 const std::string& algorithm)
+                                                 const std::string& algorithm,
+                                                 /* The following params are only used for ITLP */
+                                                 const py_bindings_tools::ByteString& gravity_vector_str,
+                                                 const bp::list& external_link_wrenches_list,
+                                                 const bp::list& joint_torque_limits_list,
+                                                 double accel_limit_decrement_factor)
   {
     // Convert reference state message to object
     moveit_msgs::RobotState ref_state_msg;
@@ -558,6 +576,26 @@ public:
       moveit_msgs::RobotTrajectory traj_msg;
       py_bindings_tools::deserializeMsg(traj_str, traj_msg);
       bool algorithm_found = true;
+
+      // Conversions for ITLP; need to do these before GIL is released.
+      geometry_msgs::Vector3 gravity_vector;
+      std::vector<geometry_msgs::Wrench> external_link_wrenches;
+      std::vector<double> joint_torque_limits;
+      if (algorithm == "iterative_torque_limit_parameterization")
+      {
+        py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector);
+
+        if (bp::len(external_link_wrenches_list) == 0) {
+          const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(getName());
+          external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
+        }
+        else {
+          convertListToArrayOfWrenches(external_link_wrenches_list, external_link_wrenches);
+        }
+
+        joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_list);
+      }
+
       {
         GILReleaser gr;
         robot_trajectory::RobotTrajectory traj_obj(getRobotModel(), getName());
@@ -573,6 +611,15 @@ public:
         {
           trajectory_processing::IterativeSplineParameterization time_param;
           time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+        }
+        else if (algorithm == "iterative_torque_limit_parameterization")
+        {
+          trajectory_processing::IterativeTorqueLimitParameterization time_param;
+          std::unordered_map<std::string, double> empty;
+          time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
+                                                       joint_torque_limits, accel_limit_decrement_factor,
+                                                       empty, empty, velocity_scaling_factor,
+                                                       acceleration_scaling_factor);
         }
         else if (algorithm == "time_optimal_trajectory_generation")
         {

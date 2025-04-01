@@ -41,4 +41,14 @@
     </description>
   </class>
 
+    <class name="default_planner_request_adapters/AddIterativeTorqueLimitParameterization" type="default_planner_request_adapters::AddIterativeTorqueLimitParameterization" base_class_type="planning_request_adapter::PlanningRequestAdapter">
+    <description>
+      Time-parameterize a trajectory with Time-Optimal Trajectory Generation, then refine until torque limits are obeyed.
+
+      NB: When called via MotionPlanRequest, e.g. as part of a planning pipeline, then only TOTG is performed;
+          the torque refinement requires extra planning params that are not provided by MotionPlanRequest. When called
+          directly, e.g. MoveGroupInterface.retime_trajectory(), then the torque refinement is performed.
+    </description>
+  </class>
+
 </library>
