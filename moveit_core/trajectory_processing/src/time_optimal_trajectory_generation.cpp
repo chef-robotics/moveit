@@ -1010,8 +1010,15 @@ bool TimeOptimalTrajectoryGeneration::computeTimeStamps(
   }
 
   // Now actually call the algorithm
-  // We use a smaller timestep for better accuracy
-  Trajectory parameterized(Path(points, path_tolerance_), max_velocity, max_acceleration, 0.1 * resample_dt_);
+  /*
+   * NB: We revert to a constant 1 ms integration step here rather than
+   * `0.1 * resample_dt_` because if the integration step is too large,
+   * then it can lead to poor trajectory fidelity and numerical instabilities.
+   * A fixed 1 ms step ensures consistent accuracy across all output rates,
+   * and avoids simulation artifacts that can arise with an adaptive step.
+   */
+  // Trajectory parameterized(Path(points, path_tolerance_), max_velocity, max_acceleration, 0.1 * resample_dt_);
+  Trajectory parameterized(Path(points, path_tolerance_), max_velocity, max_acceleration, 0.001);
   if (!parameterized.isValid())
   {
     ROS_ERROR_NAMED(LOGNAME, "Unable to parameterize trajectory.");
