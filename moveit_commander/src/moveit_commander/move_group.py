@@ -739,7 +739,12 @@ class MoveGroupCommander(object):
         gravity_vector=Vector3(x=0.0, y=0.0, z=-9.81),  # type: Vector3
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
         joint_torque_limits=None,  # type: Optional[List[float]]
+        joint_velocity_limits=None,  # type: Optional[List[float]]
+        joint_acceleration_limits=None,  # type: Optional[List[float]]
         accel_limit_decrement_factor=0.1,  # type: float
+        path_tolerance=0.1,  # type: float
+        resample_dt=0.1,  # type: float
+        min_angle_change=0.001,  # type: float
     ):
         # type: (...) -> RobotTrajectory
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
@@ -750,6 +755,10 @@ class MoveGroupCommander(object):
         ]
         if joint_torque_limits is None:
             joint_torque_limits = []
+        if joint_velocity_limits is None:
+            joint_velocity_limits = []
+        if joint_acceleration_limits is None:
+            joint_acceleration_limits = []
         ser_traj_out = self._g.retime_trajectory(
             ser_ref_state_in,
             ser_traj_in,
@@ -759,7 +768,12 @@ class MoveGroupCommander(object):
             ser_gravity_vector,
             ser_external_link_wrenches,
             joint_torque_limits,
+            joint_velocity_limits,
+            joint_acceleration_limits,
             accel_limit_decrement_factor,
+            path_tolerance,
+            resample_dt,
+            min_angle_change,
         )
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)

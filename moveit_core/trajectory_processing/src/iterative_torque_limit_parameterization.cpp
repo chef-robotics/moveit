@@ -35,6 +35,7 @@
 
 #include <moveit/dynamics_solver/dynamics_solver.h>
 #include "moveit/trajectory_processing/iterative_torque_limit_parameterization.h"
+#include <boost/format.hpp>
 
 namespace trajectory_processing
 {
@@ -43,6 +44,67 @@ namespace
 const std::string LOGNAME = "trajectory_processing.iterative_torque_limit_parameterization";
 constexpr double DEFAULT_VELOCITY_LIMIT = 1.0;
 constexpr double DEFAULT_ACCELERATION_LIMIT = 1.0;
+
+// Helper function to format torque data for a waypoint
+std::string formatTorqueData(const std::vector<std::string>& joint_names,
+                           const std::vector<double>& joint_torques,
+                           const std::vector<double>& joint_torque_limits,
+                           const robot_trajectory::RobotTrajectory& trajectory,
+                           size_t waypoint_idx)
+{
+  std::stringstream ss;
+  ss << "\nWaypoint " << waypoint_idx;
+  ss << " (dt=" << trajectory.getWayPointDurationFromPrevious(waypoint_idx) << "s):\n";
+  ss << boost::format("%-20s %-15s %-15s %-15s\n")
+        % "Joint" % "Torque" % "Limit" % "Usage(%)";
+  ss << boost::format("%-20s %-15s %-15s %-15s\n")
+        % "--------------------" % "---------------" % "---------------" % "---------------";
+  
+  for (size_t i = 0; i < joint_names.size(); ++i)
+  {
+    double usage_percent = (std::fabs(joint_torques[i]) / joint_torque_limits[i]) * 100.0;
+    ss << boost::format("%-20s %-15.3f %-15.3f %-15.1f")
+          % joint_names[i]
+          % joint_torques[i]
+          % joint_torque_limits[i]
+          % usage_percent;
+    // Add an indicator for torques near or exceeding limits
+    if (usage_percent > 99.0)
+      ss << " !";
+    ss << "\n";
+  }
+  return ss.str();
+}
+
+// Helper function to format a log message with joint limits
+std::string formatJointLimitsTable(const std::vector<std::string>& joint_names,
+                                  const std::vector<double>& torque_limits,
+                                  const std::unordered_map<std::string, double>& velocity_limits,
+                                  const std::unordered_map<std::string, double>& acceleration_limits,
+                                  const std::string& iteration_info = "")
+{
+  std::stringstream ss;
+  if (!iteration_info.empty())
+  {
+    ss << iteration_info << "\n";
+  }
+
+  ss << boost::format("%-20s %-15s %-15s %-15s\n")
+        % "Joint" % "Torque Limit" % "Velocity Limit" % "Accel Limit";
+  ss << boost::format("%-20s %-15s %-15s %-15s\n")
+        % "--------------------" % "---------------" % "---------------" % "---------------";
+
+  for (size_t j = 0; j < joint_names.size(); ++j)
+  {
+    const std::string& name = joint_names[j];
+    ss << boost::format("%-20s %-15.3f %-15.3f %-15.3f\n")
+          % name
+          % torque_limits[j]
+          % velocity_limits.at(name)
+          % acceleration_limits.at(name);
+  }
+  return ss.str();
+}
 }
 
 IterativeTorqueLimitParameterization::IterativeTorqueLimitParameterization(const double path_tolerance,
@@ -181,10 +243,19 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
   bool iteration_needed = true;
   size_t num_iterations = 0;
 
+  // Store iterations of joint limits for logging after the loop
+  std::vector<std::string> iterations_log;
   while (iteration_needed && num_iterations < max_iterations)
   {
     ++num_iterations;
     iteration_needed = false;
+
+    // Capture the joint limits at the start of this iteration
+    std::stringstream iteration_header;
+    iteration_header << "Joint limits at start of iteration " << num_iterations << ":";
+    iterations_log.push_back(formatJointLimitsTable(
+        joint_names, joint_torque_limits, mutable_vel_limits, mutable_accel_limits, 
+        iteration_header.str()));
 
     // TOTG is always run on the same trajectory;`mutable_accel_limits` is the only thing changing across iterations.
     trajectory.setRobotTrajectoryMsg(initial_state, original_traj);
@@ -212,6 +283,9 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
         ROS_ERROR_STREAM_NAMED(LOGNAME, "Dynamics computation failed.");
         return false;
       }
+
+      // Log torque data for this waypoint
+      iterations_log.push_back(formatTorqueData(joint_names, joint_torques, joint_torque_limits, trajectory, waypoint_idx));
 
       // For each joint, check if torque exceeds the limit
       for (size_t joint_idx = 0; joint_idx < joint_torque_limits.size(); ++joint_idx)
@@ -256,6 +330,15 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
       }
     }  // for each waypoint
   }  // while (iteration_needed && num_iterations < max_iterations)
+
+  // Log all the iterations
+    std::stringstream combined_log;
+    combined_log << "Joint limits progression during trajectory processing:\n";
+    for (const auto& log : iterations_log)
+    {
+      combined_log << log;
+    }
+    ROS_INFO_STREAM_NAMED(LOGNAME, combined_log.str());
 
   if (num_iterations >= max_iterations && iteration_needed)
   {

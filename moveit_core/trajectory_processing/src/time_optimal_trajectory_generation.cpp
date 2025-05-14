@@ -868,6 +868,10 @@ TimeOptimalTrajectoryGeneration::TimeOptimalTrajectoryGeneration(const double pa
                                                                  const double min_angle_change)
   : path_tolerance_(path_tolerance), resample_dt_(resample_dt), min_angle_change_(min_angle_change)
 {
+  ROS_INFO_STREAM_NAMED(LOGNAME, "Initializing TOTG with parameters:\n"
+                                << "  path_tolerance: " << path_tolerance_ << "\n"
+                                << "  resample_dt: " << resample_dt_ << "\n"
+                                << "  min_angle_change: " << min_angle_change_);
 }
 
 bool TimeOptimalTrajectoryGeneration::computeTimeStamps(

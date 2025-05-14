@@ -486,4 +486,55 @@ bool RobotTrajectory::getStateAtDurationFromStart(const double request_duration,
   return true;
 }
 
+void RobotTrajectory::getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory,
+                                            const dynamics_solver::DynamicsSolver& dynamics_solver,
+                                            const geometry_msgs::Vector3& gravity_vector,
+                                            const std::vector<geometry_msgs::Wrench>& external_link_wrenches,
+                                            const std::vector<std::string>& joint_filter) const
+{
+  // First, get the regular trajectory
+  getRobotTrajectoryMsg(trajectory, joint_filter);
+  
+  if (waypoints_.empty())
+    return;
+  
+  // Get the joint model group this trajectory is for
+  const moveit::core::JointModelGroup* group = getGroup();
+  if (!group)
+    return;
+  
+  // Should we use `group->getVariableCount()` or `group->getActiveJointModels().size()`?
+  size_t dof = group->getVariableCount();
+  std::vector<double> joint_positions(dof);
+  std::vector<double> joint_velocities(dof);
+  std::vector<double> joint_accelerations(dof);
+  std::vector<double> joint_torques(dof);
+  
+  // For each waypoint in the trajectory
+  for (size_t i = 0; i < waypoints_.size(); ++i)
+  {
+    // Skip if this waypoint already has effort data
+    if (waypoints_[i]->hasEffort())
+      continue;
+    
+    waypoints_[i]->copyJointGroupPositions(group->getName(), joint_positions);
+    waypoints_[i]->copyJointGroupVelocities(group->getName(), joint_velocities);
+    waypoints_[i]->copyJointGroupAccelerations(group->getName(), joint_accelerations);
+    
+    // Compute torques using the dynamics solver
+    if (!dynamics_solver.getTorques(joint_positions, joint_velocities, joint_accelerations, external_link_wrenches, 
+                                    joint_torques))
+    {
+      ROS_ERROR_NAMED("robot_trajectory", "Failed to compute torques for waypoint %zu", i);
+      continue;
+    }
+    
+    // Add the torques to the trajectory message
+    if (!trajectory.joint_trajectory.points.empty() && i < trajectory.joint_trajectory.points.size())
+    {
+      trajectory.joint_trajectory.points[i].effort = joint_torques;
+    }
+  }
+}
+
 }  // end of namespace robot_trajectory

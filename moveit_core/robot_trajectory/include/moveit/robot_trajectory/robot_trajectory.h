@@ -37,6 +37,7 @@
 #ifndef MOVEIT_ROBOT_TRAJECTORY_KINEMATIC_TRAJECTORY_
 #define MOVEIT_ROBOT_TRAJECTORY_KINEMATIC_TRAJECTORY_
 
+#include <moveit/dynamics_solver/dynamics_solver.h>
 #include <moveit/macros/class_forward.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit_msgs/RobotTrajectory.h>
@@ -207,6 +208,21 @@ public:
 
   void getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory,
                              const std::vector<std::string>& joint_filter = std::vector<std::string>()) const;
+    
+  /** \brief Get the trajectory as a RobotTrajectory message, with optional torque computation.
+      This version can compute and include torques in the trajectory message effort field for waypoints
+      that don't already have effort data. It preserves existing effort data when present.
+      @param trajectory The trajectory message to populate
+      @param dynamics_solver The dynamics solver to use for torque computation
+      @param gravity_vector The gravity vector to use for torque computation
+      @param external_link_wrenches External forces to consider for torque computation
+      @param joint_filter Optionally specify a subset of joints to include
+  */
+  void getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory,
+                            const dynamics_solver::DynamicsSolver& dynamics_solver,
+                            const geometry_msgs::Vector3& gravity_vector,
+                            const std::vector<geometry_msgs::Wrench>& external_link_wrenches,
+                            const std::vector<std::string>& joint_filter = std::vector<std::string>()) const;
 
   /** \brief Copy the content of the trajectory message into this class. The trajectory message itself is not required
      to contain the values
