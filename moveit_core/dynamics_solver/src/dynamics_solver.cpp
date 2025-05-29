@@ -40,6 +40,7 @@
 #include <kdl/jntarray.hpp>
 #include <kdl_parser/kdl_parser.hpp>
 #include <kdl/tree.hpp>
+#include <limits>
 
 namespace dynamics_solver
 {
@@ -127,6 +128,18 @@ DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_mode
       max_torques_.push_back(ujoint->limits->effort);
     else
       max_torques_.push_back(0.0);
+    
+    // Extract friction and damping parameters
+    if (ujoint && ujoint->dynamics)
+    {
+      coulomb_friction_.push_back(ujoint->dynamics->friction);
+      viscous_damping_.push_back(ujoint->dynamics->damping);
+    }
+    else
+    {
+      coulomb_friction_.push_back(0.0);
+      viscous_damping_.push_back(0.0);
+    }
   }
 
   KDL::Vector gravity(gravity_vector.x, gravity_vector.y,
@@ -202,7 +215,39 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
   }
 
   for (unsigned int i = 0; i < num_joints_; ++i)
+  {
+    // Start with link torque from inverse dynamics
     torques[i] = kdl_torques(i);
+    
+    // Add motor friction torque: tau_friction = tau_coulomb * sign(v) + b * v
+    double velocity = joint_velocities[i];
+    double friction_torque = 0.0;
+    
+    if (std::abs(velocity) > std::numeric_limits<double>::epsilon())
+    {
+      // Moving: apply Coulomb + viscous friction
+      friction_torque = coulomb_friction_[i] * (velocity > 0 ? 1.0 : -1.0) + 
+                       viscous_damping_[i] * velocity;
+    }
+    else
+    {
+      // At rest: friction opposes the applied torque up to coulomb limit
+      // This is a simplified model - more sophisticated models might
+      // interpolate near zero velocity
+      double applied_torque = kdl_torques(i);
+      if (std::abs(applied_torque) <= coulomb_friction_[i])
+      {
+        friction_torque = -applied_torque; // Friction cancels applied torque
+      }
+      else
+      {
+        friction_torque = -coulomb_friction_[i] * (applied_torque > 0 ? 1.0 : -1.0);
+      }
+    }
+    
+    // Add friction torque to total torque
+    torques[i] += friction_torque;
+  }
 
   return true;
 }

@@ -148,6 +148,10 @@ private:
   unsigned int num_joints_, num_segments_;  // number of joints in group, number of segments in group
   std::vector<double> max_torques_;         // vector of max torques
 
+  // Motor friction parameters
+  std::vector<double> coulomb_friction_;    // Static/Coulomb friction torques
+  std::vector<double> viscous_damping_;     // Viscous damping coefficients
+
   double gravity_;  // Norm of the gravity vector passed in initialize()
 };
 }  // namespace dynamics_solver
