@@ -152,6 +152,11 @@ private:
   std::vector<double> coulomb_friction_;    // Static/Coulomb friction torques
   std::vector<double> viscous_damping_;     // Viscous damping coefficients
 
+  // Motor parameters
+  std::vector<double> motor_inertias_;      // Motor rotational inertias (kg*m^2)
+  std::vector<double> reducer_inertias_;    // Reducer rotational inertias (kg*m^2)
+  std::vector<double> gear_ratios_;         // Gear reduction ratios
+
   double gravity_;  // Norm of the gravity vector passed in initialize()
 };
 }  // namespace dynamics_solver

@@ -41,6 +41,7 @@
 #include <kdl_parser/kdl_parser.hpp>
 #include <kdl/tree.hpp>
 #include <limits>
+#include <sstream>
 
 namespace dynamics_solver
 {
@@ -140,6 +141,45 @@ DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_mode
       coulomb_friction_.push_back(0.0);
       viscous_damping_.push_back(0.0);
     }
+    
+    // Initialize motor parameters
+    // For UR robots: harmonic drives with 101:1 reduction ratio
+    gear_ratios_.push_back(101.0);
+    
+    // Motor and reducer inertias from Table IV of the Cambridge paper
+    // These are specific measured/identified values for each joint
+    switch(i)
+    {
+      case 0:  // Joint 1 (shoulder_pan)
+        motor_inertias_.push_back(6.6119e-5);   // kg*m^2
+        reducer_inertias_.push_back(10.7e-5);   // kg*m^2
+        break;
+      case 1:  // Joint 2 (shoulder_lift)
+        motor_inertias_.push_back(4.6147e-5);   // kg*m^2
+        reducer_inertias_.push_back(10.7e-5);   // kg*m^2
+        break;
+      case 2:  // Joint 3 (elbow)
+        motor_inertias_.push_back(7.9773e-5);   // kg*m^2
+        reducer_inertias_.push_back(10.7e-5);   // kg*m^2
+        break;
+      case 3:  // Joint 4 (wrist_1)
+        motor_inertias_.push_back(1.2249e-5);   // kg*m^2
+        reducer_inertias_.push_back(0.91e-5);   // kg*m^2
+        break;
+      case 4:  // Joint 5 (wrist_2)
+        motor_inertias_.push_back(1.1868e-5);   // kg*m^2
+        reducer_inertias_.push_back(0.91e-5);   // kg*m^2
+        break;
+      case 5:  // Joint 6 (wrist_3)
+        motor_inertias_.push_back(1.1981e-5);   // kg*m^2
+        reducer_inertias_.push_back(0.91e-5);   // kg*m^2
+        break;
+      default:
+        ROS_WARN_NAMED("dynamics_solver", "Unexpected joint index %d", i);
+        motor_inertias_.push_back(0.0);
+        reducer_inertias_.push_back(0.0);
+        break;
+    }
   }
 
   KDL::Vector gravity(gravity_vector.x, gravity_vector.y,
@@ -214,10 +254,25 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
     return false;
   }
 
+  // Vectors to store torque components for logging
+  std::vector<double> kdl_torques_log(num_joints_);
+  std::vector<double> motor_inertia_torques_log(num_joints_);
+  std::vector<double> friction_torques_log(num_joints_);
+
   for (unsigned int i = 0; i < num_joints_; ++i)
   {
     // Start with link torque from inverse dynamics
-    torques[i] = kdl_torques(i);
+    double kdl_torque = kdl_torques(i);
+    torques[i] = kdl_torque;
+    kdl_torques_log[i] = kdl_torque;
+    
+    // Add reflected motor inertia contribution
+    // tau_motor = n^2 * (J_motor + J_reducer) * alpha_joint
+    double total_motor_inertia = motor_inertias_[i] + reducer_inertias_[i];
+    double motor_inertia_torque = gear_ratios_[i] * gear_ratios_[i] * 
+                                  total_motor_inertia * joint_accelerations[i];
+    torques[i] += motor_inertia_torque;
+    motor_inertia_torques_log[i] = motor_inertia_torque;
     
     // Add motor friction torque: tau_friction = tau_coulomb * sign(v) + b * v
     double velocity = joint_velocities[i];
@@ -247,7 +302,43 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
     
     // Add friction torque to total torque
     torques[i] += friction_torque;
+    friction_torques_log[i] = friction_torque;
   }
+
+  // Log torque components in a formatted table
+  std::stringstream table_stream;
+  table_stream << "\n"
+    << "===============================================================================================================\n"
+    << "                                           Torque Components (Nm)\n"
+    << "===============================================================================================================\n"
+    << "         Joint       |   KDL/Link   | Motor Inertia |   Friction   |    Total     | Vel (rad/s) | Acc (rad/s^2)\n"
+    << "---------------------|--------------|---------------|--------------|--------------|-------------|--------------\n";
+  
+  const std::vector<std::string>& joint_names = joint_model_group_->getJointModelNames();
+  for (unsigned int i = 0; i < num_joints_; ++i)
+  {
+    // Truncate joint name if too long (keep last 20 chars to preserve meaningful part)
+    std::string joint_name = joint_names[i];
+    if (joint_name.length() > 20)
+    {
+      joint_name = "..." + joint_name.substr(joint_name.length() - 17);
+    }
+    
+    char row_buffer[256];
+    snprintf(row_buffer, sizeof(row_buffer), 
+             "%-20s | %12.4f | %13.4f | %12.4f | %12.4f | %11.4f | %12.4f\n",
+             joint_name.c_str(), 
+             kdl_torques_log[i],
+             motor_inertia_torques_log[i],
+             friction_torques_log[i],
+             torques[i],
+             joint_velocities[i],
+             joint_accelerations[i]);
+    table_stream << row_buffer;
+  }
+  table_stream << "===============================================================================================================";
+  
+  ROS_INFO_NAMED("dynamics_solver", "%s", table_stream.str().c_str());
 
   return true;
 }
