@@ -338,7 +338,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     {
       combined_log << log;
     }
-    ROS_INFO_STREAM_NAMED(LOGNAME, combined_log.str());
+    // ROS_INFO_STREAM_NAMED(LOGNAME, combined_log.str());
 
   if (num_iterations >= max_iterations && iteration_needed)
   {

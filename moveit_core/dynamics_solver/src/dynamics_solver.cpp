@@ -338,7 +338,7 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
   }
   table_stream << "===============================================================================================================";
   
-  ROS_INFO_NAMED("dynamics_solver", "%s", table_stream.str().c_str());
+  // ROS_INFO_NAMED("dynamics_solver", "%s", table_stream.str().c_str());
 
   return true;
 }
