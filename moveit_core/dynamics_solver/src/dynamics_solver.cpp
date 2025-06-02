@@ -122,6 +122,7 @@ DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_mode
   state_->setToDefaultValues();
 
   const std::vector<std::string>& joint_model_names = joint_model_group_->getJointModelNames();
+  std::size_t dynamic_joint_count = 0;
   for (std::size_t i = 0; i < joint_model_names.size(); ++i)
   {
     const urdf::Joint* ujoint = urdf_model->getJoint(joint_model_names[i]).get();
@@ -135,51 +136,53 @@ DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_mode
     {
       coulomb_friction_.push_back(ujoint->dynamics->friction);
       viscous_damping_.push_back(ujoint->dynamics->damping);
+      dynamic_joint_count++;
+      // Motor and reducer inertias from Table IV of the Cambridge paper
+      // These are specific measured/identified values for each joint
+      switch(dynamic_joint_count)
+      {
+        case 1:  // Joint 1 (shoulder_pan)
+          motor_inertias_.push_back(6.6119e-5);   // kg*m^2
+          reducer_inertias_.push_back(10.7e-5);   // kg*m^2
+          break;
+        case 2:  // Joint 2 (shoulder_lift)
+          motor_inertias_.push_back(4.6147e-5);   // kg*m^2
+          reducer_inertias_.push_back(10.7e-5);   // kg*m^2
+          break;
+        case 3:  // Joint 3 (elbow)
+          motor_inertias_.push_back(7.9773e-5);   // kg*m^2
+          reducer_inertias_.push_back(10.7e-5);   // kg*m^2
+          break;
+        case 4:  // Joint 4 (wrist_1)
+          motor_inertias_.push_back(1.2249e-5);   // kg*m^2
+          reducer_inertias_.push_back(0.91e-5);   // kg*m^2
+          break;
+        case 5:  // Joint 5 (wrist_2)
+          motor_inertias_.push_back(1.1868e-5);   // kg*m^2
+          reducer_inertias_.push_back(0.91e-5);   // kg*m^2
+          break;
+        case 6:  // Joint 6 (wrist_3)
+          motor_inertias_.push_back(1.1981e-5);   // kg*m^2
+          reducer_inertias_.push_back(0.91e-5);   // kg*m^2
+          break;
+        default:
+          ROS_WARN_NAMED("dynamics_solver", "Unexpected dynamic_joint_count %d", dynamic_joint_count);
+          motor_inertias_.push_back(0.0);
+          reducer_inertias_.push_back(0.0);
+          break;
+        }
     }
     else
     {
       coulomb_friction_.push_back(0.0);
       viscous_damping_.push_back(0.0);
+      motor_inertias_.push_back(0.0);
+      reducer_inertias_.push_back(0.0);
     }
     
     // Initialize motor parameters
     // For UR robots: harmonic drives with 101:1 reduction ratio
     gear_ratios_.push_back(101.0);
-    
-    // Motor and reducer inertias from Table IV of the Cambridge paper
-    // These are specific measured/identified values for each joint
-    switch(i)
-    {
-      case 0:  // Joint 1 (shoulder_pan)
-        motor_inertias_.push_back(6.6119e-5);   // kg*m^2
-        reducer_inertias_.push_back(10.7e-5);   // kg*m^2
-        break;
-      case 1:  // Joint 2 (shoulder_lift)
-        motor_inertias_.push_back(4.6147e-5);   // kg*m^2
-        reducer_inertias_.push_back(10.7e-5);   // kg*m^2
-        break;
-      case 2:  // Joint 3 (elbow)
-        motor_inertias_.push_back(7.9773e-5);   // kg*m^2
-        reducer_inertias_.push_back(10.7e-5);   // kg*m^2
-        break;
-      case 3:  // Joint 4 (wrist_1)
-        motor_inertias_.push_back(1.2249e-5);   // kg*m^2
-        reducer_inertias_.push_back(0.91e-5);   // kg*m^2
-        break;
-      case 4:  // Joint 5 (wrist_2)
-        motor_inertias_.push_back(1.1868e-5);   // kg*m^2
-        reducer_inertias_.push_back(0.91e-5);   // kg*m^2
-        break;
-      case 5:  // Joint 6 (wrist_3)
-        motor_inertias_.push_back(1.1981e-5);   // kg*m^2
-        reducer_inertias_.push_back(0.91e-5);   // kg*m^2
-        break;
-      default:
-        ROS_WARN_NAMED("dynamics_solver", "Unexpected joint index %d", i);
-        motor_inertias_.push_back(0.0);
-        reducer_inertias_.push_back(0.0);
-        break;
-    }
   }
 
   KDL::Vector gravity(gravity_vector.x, gravity_vector.y,
