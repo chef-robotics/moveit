@@ -560,90 +560,110 @@ public:
                                                  const py_bindings_tools::ByteString& traj_str,
                                                  double velocity_scaling_factor, double acceleration_scaling_factor,
                                                  const std::string& algorithm,
-                                                 /* The following params are only used for ITLP */
                                                  const py_bindings_tools::ByteString& gravity_vector_str,
                                                  const bp::list& external_link_wrenches_list,
+                                                 /* The following params are only used for ITLP */
                                                  const bp::list& joint_torque_limits_list,
                                                  double accel_limit_decrement_factor)
   {
-    // Convert reference state message to object
+    const auto group_name = getName();
+    const auto robot_model = getRobotModel();
+
+    // Validate the robot reference state.
     moveit_msgs::RobotState ref_state_msg;
     py_bindings_tools::deserializeMsg(ref_state_str, ref_state_msg);
-    moveit::core::RobotState ref_state_obj(getRobotModel());
-    if (moveit::core::robotStateMsgToRobotState(ref_state_msg, ref_state_obj, true))
+    moveit::core::RobotState ref_state_obj(robot_model);
+    if (!moveit::core::robotStateMsgToRobotState(ref_state_msg, ref_state_obj, true))
     {
-      // Convert trajectory message to object
-      moveit_msgs::RobotTrajectory traj_msg;
-      py_bindings_tools::deserializeMsg(traj_str, traj_msg);
-      bool algorithm_found = true;
+      ROS_ERROR_NAMED("move_group_py", "Unable to convert RobotState message to RobotState instance.");
+      return py_bindings_tools::ByteString("");
+    }
 
-      // Conversions for ITLP; need to do these before GIL is released.
-      geometry_msgs::Vector3 gravity_vector;
-      std::vector<geometry_msgs::Wrench> external_link_wrenches;
-      std::vector<double> joint_torque_limits;
-      if (algorithm == "iterative_torque_limit_parameterization")
-      {
-        py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector);
+    // Convert the remaining python arguments to C++ objects.
+    // Need to do these conversions before GIL is released!
+    moveit_msgs::RobotTrajectory traj_msg;
+    py_bindings_tools::deserializeMsg(traj_str, traj_msg);
 
-        if (bp::len(external_link_wrenches_list) == 0) {
-          const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(getName());
-          external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
-        }
-        else {
-          convertListToArrayOfWrenches(external_link_wrenches_list, external_link_wrenches);
-        }
-
-        joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_list);
-      }
-
-      {
-        GILReleaser gr;
-        robot_trajectory::RobotTrajectory traj_obj(getRobotModel(), getName());
-        traj_obj.setRobotTrajectoryMsg(ref_state_obj, traj_msg);
-
-        // Do the actual retiming
-        if (algorithm == "iterative_time_parameterization")
-        {
-          trajectory_processing::IterativeParabolicTimeParameterization time_param;
-          time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
-        }
-        else if (algorithm == "iterative_spline_parameterization")
-        {
-          trajectory_processing::IterativeSplineParameterization time_param;
-          time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
-        }
-        else if (algorithm == "iterative_torque_limit_parameterization")
-        {
-          trajectory_processing::IterativeTorqueLimitParameterization time_param;
-          std::unordered_map<std::string, double> empty;
-          time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
-                                                       joint_torque_limits, accel_limit_decrement_factor,
-                                                       empty, empty, velocity_scaling_factor,
-                                                       acceleration_scaling_factor);
-        }
-        else if (algorithm == "time_optimal_trajectory_generation")
-        {
-          trajectory_processing::TimeOptimalTrajectoryGeneration time_param;
-          time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
-        }
-        else
-        {
-          ROS_ERROR_STREAM_NAMED("move_group_py", "Unknown time parameterization algorithm: " << algorithm);
-          algorithm_found = false;
-          traj_msg = moveit_msgs::RobotTrajectory();
-        }
-
-        if (algorithm_found)
-          // Convert the retimed trajectory back into a message
-          traj_obj.getRobotTrajectoryMsg(traj_msg);
-      }
-      return py_bindings_tools::serializeMsg(traj_msg);
+    geometry_msgs::Vector3 gravity_vector;
+    if (gravity_vector_str != py_bindings_tools::ByteString(""))
+    {
+      py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector);
     }
     else
     {
-      ROS_ERROR("Unable to convert RobotState message to RobotState instance.");
-      return py_bindings_tools::ByteString("");
+      ROS_WARN_NAMED("move_group_py", "No gravity vector provided. Using default gravity vector (0, 0, -9.81).");
+      gravity_vector.x = 0.0;
+      gravity_vector.y = 0.0;
+      gravity_vector.z = -9.81;
     }
+
+    std::vector<geometry_msgs::Wrench> external_link_wrenches;
+    if (bp::len(external_link_wrenches_list) == 0) {
+      const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(group_name);
+      external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
+    }
+    else {
+      convertListToArrayOfWrenches(external_link_wrenches_list, external_link_wrenches);
+    }
+
+    std::vector<double> joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_list);
+
+    // Release GIL and do the actual retiming.
+    {
+      GILReleaser gr;
+
+      robot_trajectory::RobotTrajectory traj_obj(robot_model, group_name);
+      traj_obj.setRobotTrajectoryMsg(ref_state_obj, traj_msg);
+
+      bool algorithm_found = true;
+      if (algorithm == "iterative_time_parameterization")
+      {
+        trajectory_processing::IterativeParabolicTimeParameterization time_param;
+        time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+      }
+      else if (algorithm == "iterative_spline_parameterization")
+      {
+        trajectory_processing::IterativeSplineParameterization time_param;
+        time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+      }
+      else if (algorithm == "iterative_torque_limit_parameterization")
+      {
+        std::unordered_map<std::string, double> empty_limits;
+        trajectory_processing::IterativeTorqueLimitParameterization time_param;
+        time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
+                                                     joint_torque_limits, accel_limit_decrement_factor,
+                                                     empty_limits, empty_limits, velocity_scaling_factor,
+                                                     acceleration_scaling_factor);
+      }
+      else if (algorithm == "time_optimal_trajectory_generation")
+      {
+        trajectory_processing::TimeOptimalTrajectoryGeneration time_param;
+        time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+      }
+      else
+      {
+        ROS_ERROR_STREAM_NAMED("move_group_py", "Unknown time parameterization algorithm: " << algorithm);
+        algorithm_found = false;
+        traj_msg = moveit_msgs::RobotTrajectory();
+      }
+
+      if (algorithm_found)
+      {
+        // Try to include torques in the trajectory message
+        try
+        {
+          traj_obj.getRobotTrajectoryMsg(traj_msg, std::vector<std::string>(), &gravity_vector, &external_link_wrenches);
+        }
+        catch (const std::exception& e)
+        {
+          ROS_WARN_NAMED("move_group_py", "Failed to convert trajectory to message with "
+                         "torques: [%s]. Using standard trajectory conversion.", e.what());
+          traj_obj.getRobotTrajectoryMsg(traj_msg);
+        }
+      }
+    } // End of GILReleaser.
+
+    return py_bindings_tools::serializeMsg(traj_msg);
   }
 
   Eigen::MatrixXd getJacobianMatrixPython(const bp::list& joint_values, const bp::object& reference_point = bp::object())
