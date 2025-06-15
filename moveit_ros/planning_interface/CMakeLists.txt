@@ -72,7 +72,7 @@ catkin_package(
     moveit_common_planning_interface_objects
     moveit_planning_scene_interface
     moveit_move_group_interface
-    moveit_py_bindings_tools
+    moveit_py_bindings_tools${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}
     moveit_cpp
   INCLUDE_DIRS
     ${THIS_PACKAGE_INCLUDE_DIRS}
@@ -89,6 +89,8 @@ catkin_package(
   DEPENDS
     EIGEN3
 )
+
+list(REMOVE_ITEM catkin_LIBRARIES /usr/lib/x86_64-linux-gnu/libpython2.7.so)
 
 include_directories(${THIS_PACKAGE_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
