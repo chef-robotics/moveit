@@ -38,6 +38,8 @@
 
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 
+#include <unordered_map>
+
 namespace trajectory_processing
 {
 class IterativeTorqueLimitParameterization
