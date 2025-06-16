@@ -63,11 +63,9 @@ set(THIS_PACKAGE_INCLUDE_DIRS
 catkin_python_setup()
 # Set boost_python_component if needed
 
-set(EIGEN_TARGET "/app/third_party/install/lib/libeigenpy.so")
 if("${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" EQUAL "37")
   set(Boost_PYTHON_LIBRARY "/usr/local/lib/libboost_python3.so")
   set(Boost_LIBRARIES "${Boost_PYTHON_LIBRARY}")
-  set(EIGEN_TARGET "/app/third_party/install/lib/libeigenpy${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}.so")
 endif()
 link_directories("/usr/local/lib")
 catkin_package(
