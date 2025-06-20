@@ -140,8 +140,8 @@ void MoveItConfigData::loadAllowedCollisionMatrix()
   allowed_collision_matrix_.clear();
 
   // Update the allowed collision matrix, in case there has been a change
-  for (std::vector<srdf::Model::DisabledCollision>::const_iterator pair_it = srdf_->disabled_collisions_.begin();
-       pair_it != srdf_->disabled_collisions_.end(); ++pair_it)
+  for (std::vector<srdf::Model::CollisionPair>::const_iterator pair_it = srdf_->disabled_collision_pairs_.begin();
+       pair_it != srdf_->disabled_collision_pairs_.end(); ++pair_it)
   {
     allowed_collision_matrix_.setEntry(pair_it->link1_, pair_it->link2_, true);
   }
@@ -1197,11 +1197,11 @@ bool MoveItConfigData::outputJointLimitsYAML(const std::string& file_path)
 class SortableDisabledCollision
 {
 public:
-  SortableDisabledCollision(const srdf::Model::DisabledCollision& dc)
+  SortableDisabledCollision(const srdf::Model::CollisionPair& dc)
     : dc_(dc), key_(dc.link1_ < dc.link2_ ? (dc.link1_ + "|" + dc.link2_) : (dc.link2_ + "|" + dc.link1_))
   {
   }
-  operator const srdf::Model::DisabledCollision &() const
+  operator const srdf::Model::CollisionPair &() const
   {
     return dc_;
   }
@@ -1211,19 +1211,19 @@ public:
   }
 
 private:
-  const srdf::Model::DisabledCollision dc_;
+  const srdf::Model::CollisionPair dc_;
   const std::string key_;
 };
 
 void MoveItConfigData::setCollisionLinkPairs(const moveit_setup_assistant::LinkPairMap& link_pairs, size_t skip_mask)
 {
   // Create temp disabled collision
-  srdf::Model::DisabledCollision dc;
+  srdf::Model::CollisionPair dc;
 
   std::set<SortableDisabledCollision> disabled_collisions;
-  disabled_collisions.insert(srdf_->disabled_collisions_.begin(), srdf_->disabled_collisions_.end());
+  disabled_collisions.insert(srdf_->disabled_collision_pairs_.begin(), srdf_->disabled_collision_pairs_.end());
 
-  // copy the data in this class's LinkPairMap datastructure to srdf::Model::DisabledCollision format
+  // copy the data in this class's LinkPairMap datastructure to srdf::Model::CollisionPair format
   for (moveit_setup_assistant::LinkPairMap::const_iterator pair_it = link_pairs.begin(); pair_it != link_pairs.end();
        ++pair_it)
   {
@@ -1241,7 +1241,7 @@ void MoveItConfigData::setCollisionLinkPairs(const moveit_setup_assistant::LinkP
     }
   }
 
-  srdf_->disabled_collisions_.assign(disabled_collisions.begin(), disabled_collisions.end());
+  srdf_->disabled_collision_pairs_.assign(disabled_collisions.begin(), disabled_collisions.end());
 }
 
 // ******************************************************************************************

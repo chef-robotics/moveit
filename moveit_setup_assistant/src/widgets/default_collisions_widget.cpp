@@ -676,12 +676,12 @@ void DefaultCollisionsWidget::checkedFilterChanged()
 void DefaultCollisionsWidget::linkPairsToSRDF()
 {
   // reset the data in the SRDF Writer class
-  config_data_->srdf_->disabled_collisions_.clear();
+  config_data_->srdf_->disabled_collision_pairs_.clear();
 
   // Create temp disabled collision
-  srdf::Model::DisabledCollision dc;
+  srdf::Model::CollisionPair dc;
 
-  // copy the data in this class's LinkPairMap datastructure to srdf::Model::DisabledCollision format
+  // copy the data in this class's LinkPairMap datastructure to srdf::Model::CollisionPair format
   for (moveit_setup_assistant::LinkPairMap::const_iterator pair_it = link_pairs_.begin(); pair_it != link_pairs_.end();
        ++pair_it)
   {
@@ -691,7 +691,7 @@ void DefaultCollisionsWidget::linkPairsToSRDF()
       dc.link1_ = pair_it->first.first;
       dc.link2_ = pair_it->first.second;
       dc.reason_ = moveit_setup_assistant::disabledReasonToString(pair_it->second.reason);
-      config_data_->srdf_->disabled_collisions_.push_back(dc);
+      config_data_->srdf_->disabled_collision_pairs_.push_back(dc);
     }
   }
 
@@ -718,9 +718,9 @@ void DefaultCollisionsWidget::linkPairsFromSRDF()
   std::pair<std::string, std::string> link_pair;
 
   // Loop through all disabled collisions in SRDF and update the comprehensive list that has already been created
-  for (std::vector<srdf::Model::DisabledCollision>::const_iterator collision_it =
-           config_data_->srdf_->disabled_collisions_.begin();
-       collision_it != config_data_->srdf_->disabled_collisions_.end(); ++collision_it)
+  for (std::vector<srdf::Model::CollisionPair>::const_iterator collision_it =
+           config_data_->srdf_->disabled_collision_pairs_.begin();
+       collision_it != config_data_->srdf_->disabled_collision_pairs_.end(); ++collision_it)
   {
     // Set the link names
     link_pair.first = collision_it->link1_;

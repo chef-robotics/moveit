@@ -18,7 +18,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>libogre-dev</build_depend>
+  <build_depend>libogre-1.9-dev</build_depend>
   <build_depend>qtbase5-dev</build_depend>
   <build_depend>libqt5-opengl-dev</build_depend>
   <build_depend>rviz</build_depend>
@@ -29,7 +29,7 @@
   <depend>rosconsole</depend>
   <depend>roscpp</depend>
   <depend>urdf</depend>
-  <depend>yaml-cpp</depend>
+  <depend>yaml-cpp-dev</depend>
   <depend version_gt="0.3.1">srdfdom</depend>
 
   <exec_depend>xacro</exec_depend>
