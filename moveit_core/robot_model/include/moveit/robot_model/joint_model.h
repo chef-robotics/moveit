@@ -78,6 +78,29 @@ struct VariableBounds
   bool acceleration_bounded_;
 };
 
+struct MotorDynamics
+{
+  MotorDynamics()
+    : static_friction(0.0)
+    , viscous_friction(0.0)
+    , gear_ratio(1.0)
+    , rotor_inertia(0.0)
+    , reducer_inertia(0.0)
+    , has_motor_dynamics(false)
+  {
+  }
+
+  double static_friction;
+  double viscous_friction;
+  double gear_ratio;
+  double rotor_inertia;
+  double reducer_inertia;
+  bool has_motor_dynamics;
+};
+
+/** \brief Type for motor dynamics map: joint name -> motor dynamics parameters */
+typedef std::map<std::string, MotorDynamics> MotorDynamicsMap;
+
 class LinkModel;
 class JointModel;
 
@@ -427,6 +450,24 @@ public:
     passive_ = flag;
   }
 
+  /** \brief Get the motor dynamics parameters for this joint */
+  const MotorDynamics& getMotorDynamics() const
+  {
+    return motor_dynamics_;
+  }
+
+  /** \brief Set the motor dynamics parameters for this joint */
+  void setMotorDynamics(const MotorDynamics& motor_dynamics)
+  {
+    motor_dynamics_ = motor_dynamics;
+  }
+
+  /** \brief Check if this joint has motor dynamics parameters */
+  bool hasMotorDynamics() const
+  {
+    return motor_dynamics_.has_motor_dynamics;
+  }
+
   /** \brief Computes the state that lies at time @e t in [0, 1] on the segment that connects @e from state to @e to
      state.
       The memory location of @e state is not required to be different from the memory of either
@@ -471,6 +512,10 @@ protected:
   Bounds variable_bounds_;
 
   std::vector<moveit_msgs::JointLimits> variable_bounds_msg_;
+
+  /** \brief Motor dynamics parameters for this joint;
+   * for now only applies to single DOF joints */
+  MotorDynamics motor_dynamics_;
 
   /** \brief Map from variable names to the corresponding index in variable_names_ (indexing makes sense within the
    * JointModel only) */
