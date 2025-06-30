@@ -41,6 +41,9 @@
 #include <kdl_parser/kdl_parser.hpp>
 #include <kdl/tree.hpp>
 
+#include <moveit/robot_model/joint_model.h>
+#include <limits>
+
 namespace dynamics_solver
 {
 namespace
@@ -201,8 +204,50 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
     return false;
   }
 
-  for (unsigned int i = 0; i < num_joints_; ++i)
-    torques[i] = kdl_torques(i);
+  const std::vector<const robot_model::JointModel*>& joint_models = joint_model_group_->getJointModels();
+  for (unsigned int i = 0; i < joint_models.size(); ++i)
+  {
+    const robot_model::JointModel* joint_model = joint_models[i];
+
+    // Start with link torque from inverse dynamics
+    double kdl_torque = kdl_torques(i);
+    torques[i] = kdl_torque;
+
+    // Add torque from motor dynamics
+    if (joint_model->hasMotorDynamics())
+    {
+      const robot_model::MotorDynamics& motor_dynamics = joint_model->getMotorDynamics();
+
+      // Add reflected motor inertia
+      double total_motor_inertia = motor_dynamics.rotor_inertia + motor_dynamics.reducer_inertia;
+      double motor_inertia_torque = motor_dynamics.gear_ratio * motor_dynamics.gear_ratio *
+                                    total_motor_inertia * joint_accelerations[i];
+      torques[i] += motor_inertia_torque;
+
+      // Add motor friction torque
+      // If joint is moving, apply static and viscous friction.
+      // If joint is at rest, friction opposes the applied torque up to static friction limit
+      double velocity = joint_velocities[i];
+      double friction_torque = 0.0;
+      if (std::abs(velocity) > std::numeric_limits<double>::epsilon())
+      {
+        friction_torque = motor_dynamics.static_friction * std::copysign(1.0, velocity) +
+                          motor_dynamics.viscous_friction * velocity;
+      }
+      else
+      {
+        if (std::abs(kdl_torque) < motor_dynamics.static_friction)
+        {
+          friction_torque = -kdl_torque; // Friction opposes applied torque
+        }
+        else
+        {
+          friction_torque = motor_dynamics.static_friction * std::copysign(-1.0, kdl_torque);
+        }
+      }
+      torques[i] += friction_torque;
+    }
+  }
 
   return true;
 }
