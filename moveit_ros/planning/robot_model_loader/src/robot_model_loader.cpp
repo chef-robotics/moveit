@@ -103,7 +103,7 @@ void RobotModelLoader::configure(const Options& opt)
   // If there are joint motor dynamics or additional joint limits specified in some .yaml file, read those in.
   if (model_ && !rdf_loader_->getRobotDescription().empty())
   {
-    moveit::tools::Profiler::ScopedBlock prof_block2("RobotModelLoader::configure joint limits and motor dynamics");
+    moveit::tools::Profiler::ScopedBlock prof_block2("RobotModelLoader::configure joint dynamics and limits");
 
     ros::NodeHandle nh("~");
     const moveit::core::JointDynamicsMap& joint_dynamics_map = rdf_loader_->getJointDynamicsMap();
