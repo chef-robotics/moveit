@@ -100,16 +100,23 @@ void RobotModelLoader::configure(const Options& opt)
     model_.reset(new robot_model::RobotModel(rdf_loader_->getURDF(), srdf));
   }
 
+  // If there are joint motor dynamics or additional joint limits specified in some .yaml file, read those in.
   if (model_ && !rdf_loader_->getRobotDescription().empty())
   {
-    moveit::tools::Profiler::ScopedBlock prof_block2("RobotModelLoader::configure joint limits");
+    moveit::tools::Profiler::ScopedBlock prof_block2("RobotModelLoader::configure joint dynamics and limits");
 
-    // if there are additional joint limits specified in some .yaml file, read those in
     ros::NodeHandle nh("~");
-
+    const moveit::core::JointDynamicsMap& joint_dynamics_map = rdf_loader_->getJointDynamicsMap();
     for (std::size_t i = 0; i < model_->getJointModels().size(); ++i)
     {
       robot_model::JointModel* jmodel = model_->getJointModels()[i];
+
+      auto joint_dynamics_it = joint_dynamics_map.find(jmodel->getName());
+      if (joint_dynamics_it != joint_dynamics_map.end())
+      {
+        jmodel->setJointDynamics(joint_dynamics_it->second);
+      }
+
       std::vector<moveit_msgs::JointLimits> jlim = jmodel->getVariableBoundsMsg();
       for (std::size_t j = 0; j < jlim.size(); ++j)
       {
