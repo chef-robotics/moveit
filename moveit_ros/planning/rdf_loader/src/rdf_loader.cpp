@@ -58,40 +58,36 @@
 #define pclose _pclose
 #endif
 
-namespace rdf_loader
+namespace
 {
+/** \brief Parse `chef_dynamics` for a single `joint` element */
+moveit::core::JointDynamics parseJointDynamics(TiXmlElement* joint_elem)
+{
+  moveit::core::JointDynamics joint_dynamics;
+  TiXmlElement* chef_dynamics_elem = joint_elem->FirstChildElement("chef_dynamics");
+  if (!chef_dynamics_elem)
+    return joint_dynamics;
 
-/** \brief Helper function to parse a double attribute from XML element */
-static bool parseDoubleAttribute(TiXmlElement* element, const char* attr_name, double& value)
-{
-  if (!element->Attribute(attr_name))
-    return false;
-  element->QueryDoubleAttribute(attr_name, &value);
-  return true;
+  // Parse all required attributes - if any fail, joint dynamics is incomplete
+  if (chef_dynamics_elem->QueryDoubleAttribute("coulomb_friction", &joint_dynamics.coulomb_friction) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("viscous_damping", &joint_dynamics.viscous_damping) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("gear_ratio", &joint_dynamics.gear_ratio) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("rotor_inertia", &joint_dynamics.rotor_inertia) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("reducer_inertia", &joint_dynamics.reducer_inertia) == TIXML_SUCCESS)
+  {
+    joint_dynamics.has_joint_dynamics = true;
+  }
+
+  return joint_dynamics;
 }
 
-/** \brief Parse motor dynamics for a single joint element */
-static bool parseJointMotorDynamics(TiXmlElement* joint_elem, moveit::core::MotorDynamics& motor_dynamics)
+/** \brief Construct a map of joint dynamics from URDF XML string */
+moveit::core::JointDynamicsMap parseJointDynamicsFromURDF(const std::string& urdf_string)
 {
-  TiXmlElement* motor_dynamics_elem = joint_elem->FirstChildElement("motor_dynamics");
-  if (!motor_dynamics_elem)
-    return false;
-
-  // Parse all required attributes - if any fail, motor dynamics is incomplete
-  return parseDoubleAttribute(motor_dynamics_elem, "static_friction", motor_dynamics.static_friction) &&
-         parseDoubleAttribute(motor_dynamics_elem, "viscous_friction", motor_dynamics.viscous_friction) &&
-         parseDoubleAttribute(motor_dynamics_elem, "gear_ratio", motor_dynamics.gear_ratio) &&
-         parseDoubleAttribute(motor_dynamics_elem, "rotor_inertia", motor_dynamics.rotor_inertia) &&
-         parseDoubleAttribute(motor_dynamics_elem, "reducer_inertia", motor_dynamics.reducer_inertia);
-}
-
-/** \brief Parse motor dynamics from URDF XML string */
-static moveit::core::MotorDynamicsMap parseMotorDynamicsFromURDF(const std::string& urdf_string)
-{
-  moveit::core::MotorDynamicsMap motor_dynamics_map;
+  moveit::core::JointDynamicsMap joint_dynamics_map;
 
   if (urdf_string.empty())
-    return motor_dynamics_map;
+    return joint_dynamics_map;
 
   TiXmlDocument doc;
   doc.Parse(urdf_string.c_str());
@@ -99,14 +95,13 @@ static moveit::core::MotorDynamicsMap parseMotorDynamicsFromURDF(const std::stri
   if (doc.Error())
   {
     ROS_ERROR_NAMED("rdf_loader", "Failed to parse URDF XML for motor dynamics: %s", doc.ErrorDesc());
-    return motor_dynamics_map;
+    return joint_dynamics_map;
   }
 
   TiXmlElement* robot = doc.FirstChildElement("robot");
   if (!robot)
-    return motor_dynamics_map;
+    return joint_dynamics_map;
   
-  // Process all joint elements
   for (TiXmlElement* joint_elem = robot->FirstChildElement("joint"); joint_elem;
        joint_elem = joint_elem->NextSiblingElement("joint"))
   {
@@ -114,18 +109,14 @@ static moveit::core::MotorDynamicsMap parseMotorDynamicsFromURDF(const std::stri
     if (!joint_name)
       continue;
 
-    moveit::core::MotorDynamics motor_dynamics;
-    if (parseJointMotorDynamics(joint_elem, motor_dynamics))
-    {
-      motor_dynamics.has_motor_dynamics = true;
-      motor_dynamics_map[joint_name] = motor_dynamics;
-    }
+    joint_dynamics_map[joint_name] = parseJointDynamics(joint_elem);
   }
 
-  return motor_dynamics_map;
+  return joint_dynamics_map;
 }
+}  // unnamed namespace
 
-RDFLoader::RDFLoader(const std::string& robot_description)
+rdf_loader::RDFLoader::RDFLoader(const std::string& robot_description)
 {
   moveit::tools::Profiler::ScopedStart prof_start;
   moveit::tools::Profiler::ScopedBlock prof_block("RDFLoader(robot_description)");
@@ -148,7 +139,7 @@ RDFLoader::RDFLoader(const std::string& robot_description)
   }
   urdf_ = std::move(urdf);
 
-  motor_dynamics_map_ = parseMotorDynamicsFromURDF(content);
+  joint_dynamics_map_ = parseJointDynamicsFromURDF(content);
 
   const std::string srdf_description(robot_description_ + "_semantic");
   std::string scontent;
@@ -179,7 +170,7 @@ rdf_loader::RDFLoader::RDFLoader(const std::string& urdf_string, const std::stri
   urdf_.reset(umodel);
   if (umodel->initString(urdf_string))
   {
-    motor_dynamics_map_ = parseMotorDynamicsFromURDF(urdf_string);
+    joint_dynamics_map_ = parseJointDynamicsFromURDF(urdf_string);
 
     srdf_.reset(new srdf::Model());
     if (!srdf_->initString(*urdf_, srdf_string))
@@ -301,5 +292,3 @@ bool rdf_loader::RDFLoader::loadPkgFileToString(std::string& buffer, const std::
 
   return loadXmlFileToString(buffer, path.string(), xacro_args);
 }
-
-}  // namespace rdf_loader

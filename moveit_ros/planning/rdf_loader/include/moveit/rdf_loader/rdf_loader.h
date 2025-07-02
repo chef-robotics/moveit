@@ -38,9 +38,9 @@
 #define MOVEIT_PLANNING_RDF_LOADER_
 
 #include <moveit/macros/class_forward.h>
+#include <moveit/robot_model/joint_model.h>
 #include <urdf/model.h>
 #include <srdfdom/model.h>
-#include <moveit/robot_model/joint_model.h>
 
 namespace rdf_loader
 {
@@ -78,10 +78,10 @@ public:
     return srdf_;
   }
 
-  /** @brief Get the motor dynamics map for all joints */
-  const moveit::core::MotorDynamicsMap& getMotorDynamicsMap() const
+  /** @brief Get the joint dynamics map for all joints */
+  const moveit::core::JointDynamicsMap& getJointDynamicsMap() const
   {
-    return motor_dynamics_map_;
+    return joint_dynamics_map_;
   }
 
   /** @brief determine if given path points to a xacro file */
@@ -107,7 +107,7 @@ private:
   std::string robot_description_;
   srdf::ModelSharedPtr srdf_;
   urdf::ModelInterfaceSharedPtr urdf_;
-  moveit::core::MotorDynamicsMap motor_dynamics_map_;
+  moveit::core::JointDynamicsMap joint_dynamics_map_;
 };
 }  // namespace rdf_loader
 #endif

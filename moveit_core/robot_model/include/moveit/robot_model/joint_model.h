@@ -78,28 +78,28 @@ struct VariableBounds
   bool acceleration_bounded_;
 };
 
-struct MotorDynamics
+struct JointDynamics
 {
-  MotorDynamics()
-    : static_friction(0.0)
-    , viscous_friction(0.0)
+  JointDynamics()
+    : coulomb_friction(0.0)
+    , viscous_damping(0.0)
     , gear_ratio(1.0)
     , rotor_inertia(0.0)
     , reducer_inertia(0.0)
-    , has_motor_dynamics(false)
+    , has_joint_dynamics(false)
   {
   }
 
-  double static_friction;
-  double viscous_friction;
+  double coulomb_friction; // Nm
+  double viscous_damping; // Nm*s/rad
   double gear_ratio;
-  double rotor_inertia;
-  double reducer_inertia;
-  bool has_motor_dynamics;
+  double rotor_inertia; // kg*m^2
+  double reducer_inertia; // kg*m^2
+  bool has_joint_dynamics;
 };
 
-/** \brief Type for motor dynamics map: joint name -> motor dynamics parameters */
-typedef std::map<std::string, MotorDynamics> MotorDynamicsMap;
+/** \brief Type for joint dynamics map: joint name -> joint dynamics parameters */
+typedef std::map<std::string, JointDynamics> JointDynamicsMap;
 
 class LinkModel;
 class JointModel;
@@ -450,22 +450,22 @@ public:
     passive_ = flag;
   }
 
-  /** \brief Get the motor dynamics parameters for this joint */
-  const MotorDynamics& getMotorDynamics() const
+  /** \brief Get the joint dynamics parameters for this joint */
+  const JointDynamics& getJointDynamics() const
   {
-    return motor_dynamics_;
+    return joint_dynamics_;
   }
 
-  /** \brief Set the motor dynamics parameters for this joint */
-  void setMotorDynamics(const MotorDynamics& motor_dynamics)
+  /** \brief Set the joint dynamics parameters for this joint */
+  void setJointDynamics(const JointDynamics& joint_dynamics)
   {
-    motor_dynamics_ = motor_dynamics;
+    joint_dynamics_ = joint_dynamics;
   }
 
-  /** \brief Check if this joint has motor dynamics parameters */
-  bool hasMotorDynamics() const
+  /** \brief Check if this joint has dynamics parameters */
+  bool hasJointDynamics() const
   {
-    return motor_dynamics_.has_motor_dynamics;
+    return joint_dynamics_.has_joint_dynamics;
   }
 
   /** \brief Computes the state that lies at time @e t in [0, 1] on the segment that connects @e from state to @e to
@@ -515,7 +515,7 @@ protected:
 
   /** \brief Motor dynamics parameters for this joint;
    * for now only applies to single DOF joints */
-  MotorDynamics motor_dynamics_;
+  JointDynamics joint_dynamics_;
 
   /** \brief Map from variable names to the corresponding index in variable_names_ (indexing makes sense within the
    * JointModel only) */

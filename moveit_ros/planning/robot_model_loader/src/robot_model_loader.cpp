@@ -106,15 +106,15 @@ void RobotModelLoader::configure(const Options& opt)
     moveit::tools::Profiler::ScopedBlock prof_block2("RobotModelLoader::configure joint limits and motor dynamics");
 
     ros::NodeHandle nh("~");
-    const moveit::core::MotorDynamicsMap& motor_dynamics_map = rdf_loader_->getMotorDynamicsMap();
+    const moveit::core::JointDynamicsMap& joint_dynamics_map = rdf_loader_->getJointDynamicsMap();
     for (std::size_t i = 0; i < model_->getJointModels().size(); ++i)
     {
       robot_model::JointModel* jmodel = model_->getJointModels()[i];
 
-      auto motor_dynamics_it = motor_dynamics_map.find(jmodel->getName());
-      if (motor_dynamics_it != motor_dynamics_map.end() && motor_dynamics_it->second.has_motor_dynamics)
+      auto joint_dynamics_it = joint_dynamics_map.find(jmodel->getName());
+      if (joint_dynamics_it != joint_dynamics_map.end())
       {
-        jmodel->setMotorDynamics(motor_dynamics_it->second);
+        jmodel->setJointDynamics(joint_dynamics_it->second);
       }
 
       std::vector<moveit_msgs::JointLimits> jlim = jmodel->getVariableBoundsMsg();
