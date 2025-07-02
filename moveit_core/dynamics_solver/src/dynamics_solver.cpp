@@ -150,6 +150,14 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
                                        "Check error logs.");
     return false;
   }
+  // NB: The `kdl_chain_` is constructed from the active joint models.
+  const std::vector<const moveit::core::JointModel*>& joint_models = joint_model_group_->getActiveJointModels();
+  if (joint_models.size() != num_joints_)
+  {
+    ROS_ERROR_NAMED("dynamics_solver", "Active joint vector should be size %d, but is %zu",
+                                       num_joints_, joint_models.size());
+    return false;
+  }
   if (joint_angles.size() != num_joints_)
   {
     ROS_ERROR_NAMED("dynamics_solver", "Joint angles vector should be size %d", num_joints_);
@@ -204,7 +212,6 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
     return false;
   }
 
-  const std::vector<const moveit::core::JointModel*>& joint_models = joint_model_group_->getJointModels();
   for (unsigned int i = 0; i < joint_models.size(); ++i)
   {
     // Final joint torque is the sum of the link torque, motor inertia torque, and friction torque
