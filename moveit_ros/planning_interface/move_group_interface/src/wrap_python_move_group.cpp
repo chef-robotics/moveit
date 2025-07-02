@@ -580,9 +580,7 @@ public:
   {
     dynamics_solver::DynamicsSolver dynamics_solver(robot_model, group_name, gravity_vector);
 
-    size_t dof = trajectory_msg.joint_trajectory.joint_names.size();
-    std::vector<double> joint_torques(dof);
-
+    std::vector<double> joint_torques(trajectory_msg.joint_trajectory.joint_names.size());
     for (auto& point : trajectory_msg.joint_trajectory.points)
     {
       if (dynamics_solver.getTorques(point.positions, point.velocities, point.accelerations,
