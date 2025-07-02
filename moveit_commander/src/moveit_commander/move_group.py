@@ -736,11 +736,10 @@ class MoveGroupCommander(object):
         velocity_scaling_factor=1.0,  # type: float
         acceleration_scaling_factor=1.0,  # type: float
         algorithm="iterative_time_parameterization",  # type: str
-        gravity_vector=Vector3(),  # type: Vector3
+        gravity_vector=Vector3(x=0.0, y=0.0, z=-9.81),  # type: Vector3
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
         joint_torque_limits=None,  # type: Optional[List[float]]
         accel_limit_decrement_factor=0.1,  # type: float
-        try_torque_stuffing=True,  # type: bool
     ):
         # type: (...) -> RobotTrajectory
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
@@ -761,7 +760,6 @@ class MoveGroupCommander(object):
             ser_external_link_wrenches,
             joint_torque_limits,
             accel_limit_decrement_factor,
-            try_torque_stuffing,
         )
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)
