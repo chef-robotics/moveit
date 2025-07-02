@@ -34,6 +34,7 @@
 
 /* Author: Ioan Sucan */
 
+#include <moveit/dynamics_solver/dynamics_solver.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/py_bindings_tools/roscpp_initializer.h>
 #include <moveit/py_bindings_tools/py_conversions.h>
@@ -556,15 +557,51 @@ public:
     }
   }
 
+  /**
+   * @brief Computes joint torques for each waypoint in a RobotTrajectory message
+   * and stores them in the effort field.
+   *
+   * @param trajectory_msg The trajectory to compute torques for (the effort field will be overwritten)
+   * @param robot_model The robot model to use for dynamics calculations.
+   * @param group_name Name of the joint group to compute torques for.
+   * @param gravity_vector The gravity vector to use in dynamics calculations.
+   * @param external_link_wrenches External wrenches (force/torque) acting on each link.
+   *
+   * @note No input validation is performed -- recommend calling in a try/catch.
+   * @note Assumes the joint order in trajectory_msg.joint_trajectory matches the
+   * active joint order in the robot model group.
+   * TODO(cj): Provide a binding and expose this to MoveGroupInterface.
+   */
+  void stuffTorquesIntoRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory_msg,
+                                          const robot_model::RobotModelConstPtr& robot_model,
+                                          const std::string& group_name,
+                                          const geometry_msgs::Vector3& gravity_vector,
+                                          const std::vector<geometry_msgs::Wrench>& external_link_wrenches)
+  {
+    dynamics_solver::DynamicsSolver dynamics_solver(robot_model, group_name, gravity_vector);
+
+    size_t dof = trajectory_msg.joint_trajectory.joint_names.size();
+    std::vector<double> joint_torques(dof);
+
+    for (auto& point : trajectory_msg.joint_trajectory.points)
+    {
+      if (dynamics_solver.getTorques(point.positions, point.velocities, point.accelerations,
+                                     external_link_wrenches, joint_torques))
+      {
+        point.effort = joint_torques;
+      }
+    }
+  }
+
   py_bindings_tools::ByteString retimeTrajectory(const py_bindings_tools::ByteString& ref_state_str,
                                                  const py_bindings_tools::ByteString& traj_str,
                                                  double velocity_scaling_factor, double acceleration_scaling_factor,
                                                  const std::string& algorithm,
                                                  const py_bindings_tools::ByteString& gravity_vector_str,
                                                  const bp::list& external_link_wrenches_list,
-                                                 /* The following params are only used for ITLP */
-                                                 const bp::list& joint_torque_limits_list,
-                                                 double accel_limit_decrement_factor)
+                                                 const bp::list& joint_torque_limits_list,  // ITLP only
+                                                 double accel_limit_decrement_factor, // ITLP only
+                                                 bool try_torque_stuffing = false)
   {
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
@@ -584,17 +621,10 @@ public:
     moveit_msgs::RobotTrajectory traj_msg;
     py_bindings_tools::deserializeMsg(traj_str, traj_msg);
 
-    geometry_msgs::Vector3 gravity_vector;
+    geometry_msgs::Vector3 gravity_vector;  // Default-constructed as zero vector
     if (gravity_vector_str != py_bindings_tools::ByteString(""))
     {
       py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector);
-    }
-    else
-    {
-      ROS_WARN_NAMED("move_group_py", "No gravity vector provided. Using default gravity vector (0, 0, -9.81).");
-      gravity_vector.x = 0.0;
-      gravity_vector.y = 0.0;
-      gravity_vector.z = -9.81;
     }
 
     std::vector<geometry_msgs::Wrench> external_link_wrenches;
@@ -615,7 +645,6 @@ public:
       robot_trajectory::RobotTrajectory traj_obj(robot_model, group_name);
       traj_obj.setRobotTrajectoryMsg(ref_state_obj, traj_msg);
 
-      bool algorithm_found = true;
       if (algorithm == "iterative_time_parameterization")
       {
         trajectory_processing::IterativeParabolicTimeParameterization time_param;
@@ -643,22 +672,21 @@ public:
       else
       {
         ROS_ERROR_STREAM_NAMED("move_group_py", "Unknown time parameterization algorithm: " << algorithm);
-        algorithm_found = false;
-        traj_msg = moveit_msgs::RobotTrajectory();
+        return py_bindings_tools::serializeMsg(traj_msg);
       }
 
-      if (algorithm_found)
+      traj_obj.getRobotTrajectoryMsg(traj_msg);
+
+      if (try_torque_stuffing)
       {
-        // Try to include torques in the trajectory message
         try
         {
-          traj_obj.getRobotTrajectoryMsg(traj_msg, std::vector<std::string>(), &gravity_vector, &external_link_wrenches);
+          stuffTorquesIntoRobotTrajectoryMsg(traj_msg, robot_model, group_name, gravity_vector,
+                                             external_link_wrenches);
         }
         catch (const std::exception& e)
         {
-          ROS_WARN_NAMED("move_group_py", "Failed to convert trajectory to message with "
-                         "torques: [%s]. Using standard trajectory conversion.", e.what());
-          traj_obj.getRobotTrajectoryMsg(traj_msg);
+          ROS_WARN_NAMED("move_group_py", "Failed to stuff torques into trajectory message: [%s]", e.what());
         }
       }
     } // End of GILReleaser.

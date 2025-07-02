@@ -41,8 +41,6 @@
 #include <moveit/robot_state/robot_state.h>
 #include <moveit_msgs/RobotTrajectory.h>
 #include <moveit_msgs/RobotState.h>
-#include <geometry_msgs/Vector3.h>
-#include <geometry_msgs/Wrench.h>
 #include <deque>
 
 namespace robot_trajectory
@@ -207,17 +205,8 @@ public:
 
   double getAverageSegmentDuration() const;
 
-  /**
-   * @brief Convert to a message (moveit_msgs::RobotTrajectory)
-   * @param trajectory The trajectory message to fill
-   * @param joint_filter If not empty, only include these joints in the trajectory
-   * @param gravity_vector Optional gravity vector to use for torque computation
-   * @param external_link_wrenches Optional external wrenches applied to the robot links
-   */
   void getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory,
-                             const std::vector<std::string>& joint_filter = std::vector<std::string>(),
-                             const geometry_msgs::Vector3* gravity_vector = nullptr,
-                             const std::vector<geometry_msgs::Wrench>* external_link_wrenches = nullptr) const;
+                             const std::vector<std::string>& joint_filter = std::vector<std::string>()) const;
 
   /** \brief Copy the content of the trajectory message into this class. The trajectory message itself is not required
      to contain the values

@@ -36,7 +36,6 @@
 
 #include <moveit/robot_trajectory/robot_trajectory.h>
 #include <moveit/robot_state/conversions.h>
-#include <moveit/dynamics_solver/dynamics_solver.h>
 #include <tf2_eigen/tf2_eigen.h>
 #include <boost/math/constants/constants.hpp>
 #include <numeric>
@@ -207,9 +206,7 @@ void RobotTrajectory::clear()
 }
 
 void RobotTrajectory::getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory,
-                                            const std::vector<std::string>& joint_filter,
-                                            const geometry_msgs::Vector3* gravity_vector,
-                                            const std::vector<geometry_msgs::Wrench>* external_link_wrenches) const
+                                            const std::vector<std::string>& joint_filter) const
 {
   trajectory = moveit_msgs::RobotTrajectory();
   if (waypoints_.empty())
@@ -257,24 +254,6 @@ void RobotTrajectory::getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajec
 
   static const ros::Duration ZERO_DURATION(0.0);
   double total_time = 0.0;
-
-  // Setup dynamics solver if needed for torque computation
-  std::unique_ptr<dynamics_solver::DynamicsSolver> dynamics_solver;
-  std::vector<double> joint_positions, joint_velocities, joint_accelerations, joint_torques;
-  std::vector<geometry_msgs::Wrench> wrenches;
-  if (gravity_vector && group_)
-  {
-    size_t dof = group_->getActiveJointModels().size();
-    joint_positions.resize(dof);
-    joint_velocities.resize(dof);
-    joint_accelerations.resize(dof);
-    joint_torques.resize(dof);
-    wrenches = external_link_wrenches ? 
-        *external_link_wrenches : std::vector<geometry_msgs::Wrench>(group_->getLinkModelNames().size());
-    dynamics_solver = std::make_unique<dynamics_solver::DynamicsSolver>(robot_model_, group_->getName(), 
-                                                                        *gravity_vector);
-  }
-
   for (std::size_t i = 0; i < waypoints_.size(); ++i)
   {
     if (duration_from_previous_.size() > i)
@@ -285,38 +264,20 @@ void RobotTrajectory::getRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajec
       trajectory.joint_trajectory.points[i].positions.resize(onedof.size());
       trajectory.joint_trajectory.points[i].velocities.reserve(onedof.size());
 
-      // Compute torques if needed (no effort data and we have a dynamics solver)
-      bool has_torques = false;
-      if (!waypoints_[i]->hasEffort() && dynamics_solver)
-      {
-        waypoints_[i]->copyJointGroupPositions(group_->getName(), joint_positions);
-        waypoints_[i]->copyJointGroupVelocities(group_->getName(), joint_velocities);
-        waypoints_[i]->copyJointGroupAccelerations(group_->getName(), joint_accelerations);
-        has_torques = dynamics_solver->getTorques(joint_positions, joint_velocities, joint_accelerations, wrenches, 
-                                                  joint_torques);
-      }
-
       for (std::size_t j = 0; j < onedof.size(); ++j)
       {
         trajectory.joint_trajectory.points[i].positions[j] =
             waypoints_[i]->getVariablePosition(onedof[j]->getFirstVariableIndex());
-        // if we have velocities/accelerations, copy those too
+        // if we have velocities/accelerations/effort, copy those too
         if (waypoints_[i]->hasVelocities())
           trajectory.joint_trajectory.points[i].velocities.push_back(
               waypoints_[i]->getVariableVelocity(onedof[j]->getFirstVariableIndex()));
         if (waypoints_[i]->hasAccelerations())
           trajectory.joint_trajectory.points[i].accelerations.push_back(
               waypoints_[i]->getVariableAcceleration(onedof[j]->getFirstVariableIndex()));
-        // Use waypoint's effort if available, otherwise use computed torque if available
         if (waypoints_[i]->hasEffort())
-        {
           trajectory.joint_trajectory.points[i].effort.push_back(
               waypoints_[i]->getVariableEffort(onedof[j]->getFirstVariableIndex()));
-        }
-        else if (has_torques)
-        {
-          trajectory.joint_trajectory.points[i].effort.push_back(joint_torques[onedof[j]->getFirstVariableIndex()]);
-        }
       }
       // clear velocities if we have an incomplete specification
       if (trajectory.joint_trajectory.points[i].velocities.size() != onedof.size())
