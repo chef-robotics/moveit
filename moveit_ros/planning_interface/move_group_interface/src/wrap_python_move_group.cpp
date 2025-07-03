@@ -51,6 +51,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/buffer.h>
 
+#include <boost/optional.hpp>
 #include <boost/python.hpp>
 #include <eigenpy/eigenpy.hpp>
 #include <memory>
@@ -598,23 +599,23 @@ public:
    * @param traj_str Serialized RobotTrajectory message to be retimed
    * @param velocity_scaling_factor Factor to scale maximum joint velocities (0.0-1.0)
    * @param acceleration_scaling_factor Factor to scale maximum joint accelerations (0.0-1.0)
-   * @param algorithm Algorithm to use for time parameterization:
+   * @param algorithm Time parameterization algorithm:
    *   - iterative_time_parameterization (IPTP)
    *   - iterative_spline_parameterization (ISP)
    *   - time_optimal_trajectory_generation (TOTG)
    *   - iterative_torque_limit_parameterization (ITLP)
-   * @param try_torque_stuffing Whether to compute and store joint torques in the retimed trajectory (default: true)
-   * @param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. the robot model base frame;
-   *   If not specified (None), then zero gravity is assumed.
-   * @param external_link_wrenches_obj Optional list of serialized Wrench messages for external forces on links;
-   *   If not specified (None), then zero external wrenches are assumed for all links.
-   * @param path_tolerance Path tolerance for TOTG and ITLP (default: 0.1, radians)
-   * @param resample_dt Time step for resampling in TOTG and ITLP (default: 0.01, seconds)
-   * @param min_angle_change Minimum angle change threshold for TOTG and ITLP (default: 0.001, radians)
-   * @param joint_torque_limits_obj Optional list of torque limits (Nm) for each joint (required for ITLP)
-   * @param accel_limit_decrement_factor Factor-of-change in joint acceleration limits between iterations
-   *   of ITLP (default: 0.1)
-   * @param max_iterations Maximum iterations for ITLP algorithm (default: 10)
+   * @param try_torque_stuffing Whether to compute and store joint torques in retimed trajectory (default: true)
+   * @param gravity_vector_obj Serialized Vector3 message for gravity w.r.t. robot model base frame;
+   *   If not specified, zero gravity is assumed.
+   * @param external_link_wrenches_obj List of serialized Wrench messages for external forces on links;
+   *   If not specified, zero external wrenches are assumed for all links.
+   *   If specified, the number of wrenches must match the number of links in the robot model.
+   * @param path_tolerance_obj See TOTG and ITLP for details
+   * @param resample_dt_obj See TOTG and ITLP for details
+   * @param min_angle_change_obj See TOTG and ITLP for details
+   * @param joint_torque_limits_obj See ITLP for details; required if algorithm is ITLP!
+   * @param accel_limit_decrement_factor_obj See ITLP for details
+   * @param max_iterations_obj See ITLP for details
    *
    * @return Serialized RobotTrajectory message with time parameterization applied.
    */
@@ -625,12 +626,12 @@ public:
                                                  bool try_torque_stuffing = true,
                                                  const bp::object& gravity_vector_obj = bp::object(),
                                                  const bp::object& external_link_wrenches_obj = bp::object(),
-                                                 double path_tolerance = 0.1,
-                                                 double resample_dt = 0.01,
-                                                 double min_angle_change = 0.001,
+                                                 const bp::object& path_tolerance_obj = bp::object(),
+                                                 const bp::object& resample_dt_obj = bp::object(),
+                                                 const bp::object& min_angle_change_obj = bp::object(),
                                                  const bp::object& joint_torque_limits_obj = bp::object(),
-                                                 double accel_limit_decrement_factor = 0.1,
-                                                 size_t max_iterations = 10)
+                                                 const bp::object& accel_limit_decrement_factor_obj = bp::object(),
+                                                 const bp::object& max_iterations_obj = bp::object())
   {
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
@@ -673,6 +674,18 @@ public:
     {
       joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_obj);
     }
+
+    // Convert optional parameters to boost::optional
+    boost::optional<double> path_tolerance = !path_tolerance_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(path_tolerance_obj)) : boost::none;
+    boost::optional<double> resample_dt = !resample_dt_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(resample_dt_obj)) : boost::none;
+    boost::optional<double> min_angle_change = !min_angle_change_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(min_angle_change_obj)) : boost::none;
+    boost::optional<double> accel_limit_decrement_factor = !accel_limit_decrement_factor_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(accel_limit_decrement_factor_obj)) : boost::none;
+    boost::optional<size_t> max_iterations = !max_iterations_obj.is_none() ?
+        boost::optional<size_t>(bp::extract<size_t>(max_iterations_obj)) : boost::none;
 
     // Release GIL and do the actual retiming.
     {

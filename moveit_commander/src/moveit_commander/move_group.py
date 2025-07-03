@@ -739,12 +739,12 @@ class MoveGroupCommander(object):
         try_torque_stuffing=True,  # type: bool
         gravity_vector=None,  # type: Optional[Vector3]
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
-        path_tolerance=0.1,  # type: float
-        resample_dt=0.01,  # type: float
-        min_angle_change=0.001,  # type: float
+        path_tolerance=None,  # type: Optional[float]
+        resample_dt=None,  # type: Optional[float]
+        min_angle_change=None,  # type: Optional[float]
         joint_torque_limits=None,  # type: Optional[List[float]]
-        accel_limit_decrement_factor=0.1,  # type: float
-        max_iterations=10,  # type: int
+        accel_limit_decrement_factor=None,  # type: Optional[float]
+        max_iterations=None,  # type: Optional[int]
     ):
         # type: (...) -> RobotTrajectory
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)

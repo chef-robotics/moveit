@@ -45,9 +45,9 @@ constexpr double DEFAULT_VELOCITY_LIMIT = 1.0;
 constexpr double DEFAULT_ACCELERATION_LIMIT = 1.0;
 }
 
-IterativeTorqueLimitParameterization::IterativeTorqueLimitParameterization(const double path_tolerance,
-                                                                           const double resample_dt,
-                                                                           const double min_angle_change)
+IterativeTorqueLimitParameterization::IterativeTorqueLimitParameterization(boost::optional<double> path_tolerance,
+                                                                           boost::optional<double> resample_dt,
+                                                                           boost::optional<double> min_angle_change)
   : totg_(path_tolerance, resample_dt, min_angle_change)
 {
 }
@@ -56,12 +56,16 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     robot_trajectory::RobotTrajectory& trajectory, const geometry_msgs::Vector3& gravity_vector,
     const std::vector<geometry_msgs::Wrench>& external_link_wrenches, const std::vector<double>& joint_torque_limits,
     const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
-    const double accel_limit_decrement_factor, const size_t max_iterations,
-    const bool reset_trajectory_after_max_iterations) const
+    boost::optional<double> accel_limit_decrement_factor, boost::optional<size_t> max_iterations,
+    boost::optional<bool> reset_trajectory_after_max_iterations) const
 {
   // 1. Call computeTimeStamps() to time-parameterize the trajectory with given vel/accel limits.
   // 2. Run forward dynamics to check if torque limits are violated at any waypoint.
   // 3. If a torque limit was violated, decrease the acceleration limit for that joint and go back to Step 1.
+
+  const double accel_decrement_factor = accel_limit_decrement_factor.get_value_or(0.1);
+  const size_t max_iter = max_iterations.get_value_or(10);
+  const bool reset_trajectory = reset_trajectory_after_max_iterations.get_value_or(false);
 
   if (trajectory.empty())
     return true;
@@ -83,7 +87,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     return false;
   }
 
-  if (accel_limit_decrement_factor < 0.01 || accel_limit_decrement_factor > 0.2)
+  if (accel_decrement_factor < 0.01 || accel_decrement_factor > 0.2)
   {
     ROS_ERROR_NAMED(LOGNAME, "The accel_limit_decrement_factor is outside the typical range [0.01, 0.2]");
     return false;
@@ -176,7 +180,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
   bool iteration_needed = true;
   size_t num_iterations = 0;
 
-  while (iteration_needed && num_iterations < max_iterations)
+  while (iteration_needed && num_iterations < max_iter)
   {
     ++num_iterations;
     iteration_needed = false;
@@ -225,7 +229,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
 
           // Check if decreasing acceleration of this joint actually decreases joint torque. Else, increase acceleration.
           double previous_torque = joint_torques.at(joint_idx);
-          joint_accelerations.at(joint_idx) *= (1 + accel_limit_decrement_factor);
+          joint_accelerations.at(joint_idx) *= (1 + accel_decrement_factor);
           if (!dynamics_solver.getTorques(joint_positions, joint_velocities, joint_accelerations,
                                           external_link_wrenches, joint_torques))
           {
@@ -234,11 +238,11 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
           }
           if (std::fabs(joint_torques.at(joint_idx)) < std::fabs(previous_torque))
           {
-            acceleration_limits.at(joint_models.at(joint_idx)->getName()) *= (1 + accel_limit_decrement_factor);
+            acceleration_limits.at(joint_models.at(joint_idx)->getName()) *= (1 + accel_decrement_factor);
           }
           else
           {
-            acceleration_limits.at(joint_models.at(joint_idx)->getName()) *= (1 - accel_limit_decrement_factor);
+            acceleration_limits.at(joint_models.at(joint_idx)->getName()) *= (1 - accel_decrement_factor);
           }
 
           iteration_needed = true;
@@ -250,11 +254,11 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
         break;
       }
     }  // for each waypoint
-  }  // while (iteration_needed && num_iterations < max_iterations)
+      }  // while (iteration_needed && num_iterations < max_iter)
 
-  if (num_iterations >= max_iterations && iteration_needed)
+  if (num_iterations >= max_iter && iteration_needed)
   {
-    if (reset_trajectory_after_max_iterations)
+    if (reset_trajectory)
     {
       ROS_WARN_STREAM_NAMED(LOGNAME, "ITLP needs more than max_iterations; resetting trajectory");
       trajectory.setRobotTrajectoryMsg(initial_state, original_traj);
