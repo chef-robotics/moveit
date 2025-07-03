@@ -166,7 +166,7 @@ MOVEIT_CLASS_FORWARD(TimeOptimalTrajectoryGeneration);
 class TimeOptimalTrajectoryGeneration : public TimeParameterization
 {
 public:
-  TimeOptimalTrajectoryGeneration(const double path_tolerance = 0.1, const double resample_dt = 0.1,
+  TimeOptimalTrajectoryGeneration(const double path_tolerance = 0.1, const double resample_dt = 0.01,
                                   const double min_angle_change = 0.001);
 
   /**

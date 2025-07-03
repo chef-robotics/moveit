@@ -736,32 +736,45 @@ class MoveGroupCommander(object):
         velocity_scaling_factor=1.0,  # type: float
         acceleration_scaling_factor=1.0,  # type: float
         algorithm="iterative_time_parameterization",  # type: str
-        gravity_vector=Vector3(),  # type: Vector3
+        try_torque_stuffing=True,  # type: bool
+        gravity_vector=None,  # type: Optional[Vector3]
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
+        path_tolerance=0.1,  # type: float
+        resample_dt=0.01,  # type: float
+        min_angle_change=0.001,  # type: float
         joint_torque_limits=None,  # type: Optional[List[float]]
         accel_limit_decrement_factor=0.1,  # type: float
-        try_torque_stuffing=True,  # type: bool
+        max_iterations=10,  # type: int
     ):
         # type: (...) -> RobotTrajectory
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
-        ser_gravity_vector = conversions.msg_to_string(gravity_vector)
-        ser_external_link_wrenches = [
-            conversions.msg_to_string(w) for w in external_link_wrenches or []
-        ]
-        if joint_torque_limits is None:
-            joint_torque_limits = []
+
+        ser_gravity_vector = None
+        if gravity_vector is not None:
+            ser_gravity_vector = conversions.msg_to_string(gravity_vector)
+
+        ser_external_link_wrenches = None
+        if external_link_wrenches is not None:
+            ser_external_link_wrenches = [
+                conversions.msg_to_string(w) for w in external_link_wrenches
+            ]
+
         ser_traj_out = self._g.retime_trajectory(
             ser_ref_state_in,
             ser_traj_in,
             velocity_scaling_factor,
             acceleration_scaling_factor,
             algorithm,
+            try_torque_stuffing,
             ser_gravity_vector,
             ser_external_link_wrenches,
+            path_tolerance,
+            resample_dt,
+            min_angle_change,
             joint_torque_limits,
             accel_limit_decrement_factor,
-            try_torque_stuffing,
+            max_iterations,
         )
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)

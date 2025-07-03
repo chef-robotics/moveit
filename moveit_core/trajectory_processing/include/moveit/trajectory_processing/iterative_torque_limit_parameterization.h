@@ -43,7 +43,7 @@ namespace trajectory_processing
 class IterativeTorqueLimitParameterization
 {
 public:
-  IterativeTorqueLimitParameterization(const double path_tolerance = 0.1, const double resample_dt = 0.1,
+  IterativeTorqueLimitParameterization(const double path_tolerance = 0.1, const double resample_dt = 0.01,
                                        const double min_angle_change = 0.001);
 
   /**
@@ -55,27 +55,25 @@ public:
    * meters for prismatic joints.
    * \param[in,out] trajectory A path which needs time-parameterization. It's OK if this path has already been
    * time-parameterized; this function will re-time-parameterize it.
-   * \param gravity_vector For example, (0, 0, -9.81). Units are m/s^2
+   * \param gravity_vector W.r.t. the robot's base frame. Units are m/s^2
    * \param external_link_wrenches Externally-applied wrenches on each link. TODO(andyz): what frame is this in?
-   * \param joint_torque_limits Torque limits for each joint in N*m. All should be >0. TODO(cj): Populate from robot
-   *   description.
-   * \param accel_limit_decrement_factor Typically in the range [0.01-0.1].
-   * This affects how fast acceleration limits are decreased while searching for a solution. Time-optimality
-   * of the output is accurate to approximately 100*accel_limit_decrement_factor %.
-   * For example, if accel_limit_decrement_factor is 0.1, the output should be within 10% of time-optimal.
+   * \param joint_torque_limits Torque limits for each joint in N*m. All should be >0.
    * \param max_velocity_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
    * \param max_acceleration_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
+   * \param accel_limit_decrement_factor Must be in the range [0.01-0.2]. Default: 0.1.
+   *    This affects how fast acceleration limits are decreased while searching for a solution.
+   *    Time-optimality of the output is accurate to approximately 100*accel_limit_decrement_factor %.
+   *    For example, if accel_limit_decrement_factor is 0.1, the output should be within 10% of time-optimal.
    * \param max_iterations Maximum number of times to do the TOTG->torque check->accel change loop. Default: 10.
    * \param reset_traj_after_max_iterations Whether to reset `trajectory` to its initial state when more than
-   *   `max_iterations` iterations is needed to get all torques under their limits. Default: False, i.e. return the
+   *   `max_iterations` iterations is needed to get all torques under their limits. Default: False, i.e. use the
    *   result of the last iteration.
    */
   bool computeTimeStampsWithTorqueLimits(
       robot_trajectory::RobotTrajectory& trajectory, const geometry_msgs::Vector3& gravity_vector,
       const std::vector<geometry_msgs::Wrench>& external_link_wrenches, const std::vector<double>& joint_torque_limits,
-      double accel_limit_decrement_factor, const std::unordered_map<std::string, double>& velocity_limits,
-      const std::unordered_map<std::string, double>& acceleration_limits, const double max_velocity_scaling_factor,
-      const double max_acceleration_scaling_factor, const size_t max_iterations = 10,
+      const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
+      const double accel_limit_decrement_factor = 0.1, const size_t max_iterations = 10,
       const bool reset_trajectory_after_max_iterations = false) const;
 
 private:

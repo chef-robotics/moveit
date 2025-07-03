@@ -591,15 +591,46 @@ public:
     }
   }
 
+  /**
+   * @brief Retime a RobotTrajectory message using one of several time parameterization algorithms.
+   *
+   * @param ref_state_str Serialized RobotState message representing the reference state
+   * @param traj_str Serialized RobotTrajectory message to be retimed
+   * @param velocity_scaling_factor Factor to scale maximum joint velocities (0.0-1.0)
+   * @param acceleration_scaling_factor Factor to scale maximum joint accelerations (0.0-1.0)
+   * @param algorithm Algorithm to use for time parameterization:
+   *   - iterative_time_parameterization (IPTP)
+   *   - iterative_spline_parameterization (ISP)
+   *   - time_optimal_trajectory_generation (TOTG)
+   *   - iterative_torque_limit_parameterization (ITLP)
+   * @param try_torque_stuffing Whether to compute and store joint torques in the retimed trajectory (default: true)
+   * @param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. the robot model base frame;
+   *   If not specified (None), then zero gravity is assumed.
+   * @param external_link_wrenches_obj Optional list of serialized Wrench messages for external forces on links;
+   *   If not specified (None), then zero external wrenches are assumed for all links.
+   * @param path_tolerance Path tolerance for TOTG and ITLP (default: 0.1, radians)
+   * @param resample_dt Time step for resampling in TOTG and ITLP (default: 0.01, seconds)
+   * @param min_angle_change Minimum angle change threshold for TOTG and ITLP (default: 0.001, radians)
+   * @param joint_torque_limits_obj Optional list of torque limits (Nm) for each joint (required for ITLP)
+   * @param accel_limit_decrement_factor Factor-of-change in joint acceleration limits between iterations
+   *   of ITLP (default: 0.1)
+   * @param max_iterations Maximum iterations for ITLP algorithm (default: 10)
+   *
+   * @return Serialized RobotTrajectory message with time parameterization applied.
+   */
   py_bindings_tools::ByteString retimeTrajectory(const py_bindings_tools::ByteString& ref_state_str,
                                                  const py_bindings_tools::ByteString& traj_str,
                                                  double velocity_scaling_factor, double acceleration_scaling_factor,
                                                  const std::string& algorithm,
-                                                 const py_bindings_tools::ByteString& gravity_vector_str,
-                                                 const bp::list& external_link_wrenches_list,
-                                                 const bp::list& joint_torque_limits_list,  // ITLP only
-                                                 double accel_limit_decrement_factor, // ITLP only
-                                                 bool try_torque_stuffing = false)
+                                                 bool try_torque_stuffing = true,
+                                                 const bp::object& gravity_vector_obj = bp::object(),
+                                                 const bp::object& external_link_wrenches_obj = bp::object(),
+                                                 double path_tolerance = 0.1,
+                                                 double resample_dt = 0.01,
+                                                 double min_angle_change = 0.001,
+                                                 const bp::object& joint_torque_limits_obj = bp::object(),
+                                                 double accel_limit_decrement_factor = 0.1,
+                                                 size_t max_iterations = 10)
   {
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
@@ -620,21 +651,28 @@ public:
     py_bindings_tools::deserializeMsg(traj_str, traj_msg);
 
     geometry_msgs::Vector3 gravity_vector;  // Default-constructed as zero vector
-    if (gravity_vector_str != py_bindings_tools::ByteString(""))
+    if (!gravity_vector_obj.is_none())
     {
-      py_bindings_tools::deserializeMsg(gravity_vector_str, gravity_vector);
+      py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj),
+                                        gravity_vector);
     }
 
     std::vector<geometry_msgs::Wrench> external_link_wrenches;
-    if (bp::len(external_link_wrenches_list) == 0) {
+    if (!external_link_wrenches_obj.is_none())
+    {
+      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
+    }
+    if (external_link_wrenches.empty())
+    {
       const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(group_name);
       external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
     }
-    else {
-      convertListToArrayOfWrenches(external_link_wrenches_list, external_link_wrenches);
-    }
 
-    std::vector<double> joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_list);
+    std::vector<double> joint_torque_limits;
+    if (!joint_torque_limits_obj.is_none())
+    {
+      joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_obj);
+    }
 
     // Release GIL and do the actual retiming.
     {
@@ -655,16 +693,17 @@ public:
       }
       else if (algorithm == "iterative_torque_limit_parameterization")
       {
-        std::unordered_map<std::string, double> empty_limits;
-        trajectory_processing::IterativeTorqueLimitParameterization time_param;
+        trajectory_processing::IterativeTorqueLimitParameterization time_param(path_tolerance, resample_dt,
+                                                                               min_angle_change);
         time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
-                                                     joint_torque_limits, accel_limit_decrement_factor,
-                                                     empty_limits, empty_limits, velocity_scaling_factor,
-                                                     acceleration_scaling_factor);
+                                                     joint_torque_limits, velocity_scaling_factor,
+                                                     acceleration_scaling_factor, accel_limit_decrement_factor,
+                                                     max_iterations);
       }
       else if (algorithm == "time_optimal_trajectory_generation")
       {
-        trajectory_processing::TimeOptimalTrajectoryGeneration time_param;
+        trajectory_processing::TimeOptimalTrajectoryGeneration time_param(path_tolerance, resample_dt,
+                                                                          min_angle_change);
         time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
       }
       else
