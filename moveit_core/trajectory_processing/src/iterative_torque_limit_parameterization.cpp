@@ -45,9 +45,9 @@ constexpr double DEFAULT_VELOCITY_LIMIT = 1.0;
 constexpr double DEFAULT_ACCELERATION_LIMIT = 1.0;
 }
 
-IterativeTorqueLimitParameterization::IterativeTorqueLimitParameterization(const double path_tolerance,
-                                                                           const double resample_dt,
-                                                                           const double min_angle_change)
+IterativeTorqueLimitParameterization::IterativeTorqueLimitParameterization(boost::optional<double> path_tolerance,
+                                                                           boost::optional<double> resample_dt,
+                                                                           boost::optional<double> min_angle_change)
   : totg_(path_tolerance, resample_dt, min_angle_change)
 {
 }
@@ -55,14 +55,17 @@ IterativeTorqueLimitParameterization::IterativeTorqueLimitParameterization(const
 bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     robot_trajectory::RobotTrajectory& trajectory, const geometry_msgs::Vector3& gravity_vector,
     const std::vector<geometry_msgs::Wrench>& external_link_wrenches, const std::vector<double>& joint_torque_limits,
-    double accel_limit_decrement_factor, const std::unordered_map<std::string, double>& velocity_limits,
-    const std::unordered_map<std::string, double>& acceleration_limits, const double max_velocity_scaling_factor,
-    const double max_acceleration_scaling_factor, const size_t max_iterations,
-    const bool reset_trajectory_after_max_iterations) const
+    const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
+    boost::optional<double> accel_limit_decrement_factor, boost::optional<size_t> max_iterations,
+    boost::optional<bool> reset_trajectory_after_max_iterations) const
 {
   // 1. Call computeTimeStamps() to time-parameterize the trajectory with given vel/accel limits.
   // 2. Run forward dynamics to check if torque limits are violated at any waypoint.
   // 3. If a torque limit was violated, decrease the acceleration limit for that joint and go back to Step 1.
+
+  const double accel_decrement_factor = accel_limit_decrement_factor.get_value_or(0.1);
+  const size_t max_iter = max_iterations.get_value_or(10);
+  const bool reset_trajectory_after_max_iter = reset_trajectory_after_max_iterations.get_value_or(false);
 
   if (trajectory.empty())
     return true;
@@ -74,7 +77,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     return false;
   }
 
-  size_t dof = group->getActiveJointModels().size();
+  const size_t dof = group->getActiveJointModels().size();
 
   if (joint_torque_limits.size() != dof)
   {
@@ -84,18 +87,11 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     return false;
   }
 
-  if (accel_limit_decrement_factor < 0.01 || accel_limit_decrement_factor > 0.2)
+  if (accel_decrement_factor < 0.01 || accel_decrement_factor > 0.2)
   {
     ROS_ERROR_NAMED(LOGNAME, "The accel_limit_decrement_factor is outside the typical range [0.01, 0.2]");
     return false;
   }
-
-  /* Create a mutable copy of `velocity_limits` and `acceleration_limits`;
-   * fill them in from the robot description if they are empty.
-   * TODO(cj): Factor out limit resolution; common/duplicated in TOTG as well.
-   */
-  std::unordered_map<std::string, double> mutable_vel_limits = velocity_limits;
-  std::unordered_map<std::string, double> mutable_accel_limits = acceleration_limits;
 
   // Lambda for validating limits
   auto validate_limit = [](const char* type, double value, const std::string& name) {
@@ -112,10 +108,14 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
   size_t num_joints = joint_names.size();
   const robot_model::JointBoundsVector joint_bounds = group->getActiveJointModelsBounds();
 
+  // TODO(cj): Factor out limit resolution; common/duplicated in TOTG as well.
+  std::unordered_map<std::string, double> velocity_limits;
+  std::unordered_map<std::string, double> mutable_acceleration_limits;
+
   for (size_t j = 0; j < num_joints; ++j)
   {
     const std::string& name = joint_names[j];
-    // Each element in joint_bounds is a pointer to a Bounds (i.e., vector<VariableBounds>)
+    // Each element in `joint_bounds` is a pointer to a Bounds object, which masks vector<VariableBounds>.
     const robot_model::JointModel::Bounds* bounds_ptr = joint_bounds[j];
     if (bounds_ptr->size() != 1)
     {
@@ -124,50 +124,36 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     }
     const moveit::core::VariableBounds vb = (*bounds_ptr)[0];
 
-    // Resolve velocity limit: Fill in if not already provided.
-    auto it = mutable_vel_limits.find(name);
-    if (it == mutable_vel_limits.end())
+    // Resolve velocity limit
+    if (vb.velocity_bounded_)
     {
-      if (vb.velocity_bounded_)
+      double limit = std::min(std::fabs(vb.max_velocity_), std::fabs(vb.min_velocity_));
+      if (!validate_limit("velocity", limit, name))
       {
-        double limit = std::min(std::fabs(vb.max_velocity_), std::fabs(vb.min_velocity_));
-        if (!validate_limit("velocity", limit, name))
-          return false;
-        mutable_vel_limits[name] = limit;
-      }
-      else
-      {
-        mutable_vel_limits[name] = DEFAULT_VELOCITY_LIMIT;
-        ROS_WARN_ONCE_NAMED(LOGNAME,
-          "No velocity limits defined for '%s'! Define them in URDF or joint_limits.yaml", name.c_str());
-      }
-    }
-    else {
-      if (!validate_limit("velocity", it->second, name))
         return false;
+      }
+      velocity_limits[name] = limit;
+    }
+    else
+    {
+      velocity_limits[name] = DEFAULT_VELOCITY_LIMIT;
+      ROS_WARN_ONCE_NAMED(LOGNAME, "No velocity limits defined for '%s'! Define them in the URDF.", name.c_str());
     }
 
-    // Resolve acceleration limit: Fill in if not already provided.
-    it = mutable_accel_limits.find(name);
-    if (it == mutable_accel_limits.end())
+    // Resolve acceleration limit
+    if (vb.acceleration_bounded_)
     {
-      if (vb.acceleration_bounded_)
+      double limit = std::min(std::fabs(vb.max_acceleration_), std::fabs(vb.min_acceleration_));
+      if (!validate_limit("acceleration", limit, name))
       {
-        double limit = std::min(std::fabs(vb.max_acceleration_), std::fabs(vb.min_acceleration_));
-        if (!validate_limit("acceleration", limit, name))
-          return false;
-        mutable_accel_limits[name] = limit;
-      }
-      else
-      {
-        mutable_accel_limits[name] = DEFAULT_ACCELERATION_LIMIT;
-        ROS_WARN_ONCE_NAMED(LOGNAME,
-          "No acceleration limits defined for '%s'! Define them in joint_limits.yaml", name.c_str());
-      }
-    }
-    else {
-      if (!validate_limit("acceleration", it->second, name))
         return false;
+      }
+      mutable_acceleration_limits[name] = limit;
+    }
+    else
+    {
+      mutable_acceleration_limits[name] = DEFAULT_ACCELERATION_LIMIT;
+      ROS_WARN_ONCE_NAMED(LOGNAME, "No acceleration limits defined for '%s'! Define them in the URDF.", name.c_str());
     }
   }
 
@@ -181,14 +167,15 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
   bool iteration_needed = true;
   size_t num_iterations = 0;
 
-  while (iteration_needed && num_iterations < max_iterations)
+  while (iteration_needed && num_iterations < max_iter)
   {
     ++num_iterations;
     iteration_needed = false;
 
-    // TOTG is always run on the same trajectory;`mutable_accel_limits` is the only thing changing across iterations.
+    // TOTG is always run on the same trajectory;
+    // `mutable_acceleration_limits` is the only thing changing across iterations.
     trajectory.setRobotTrajectoryMsg(initial_state, original_traj);
-    totg_.computeTimeStamps(trajectory, mutable_vel_limits, mutable_accel_limits, max_velocity_scaling_factor,
+    totg_.computeTimeStamps(trajectory, velocity_limits, mutable_acceleration_limits, max_velocity_scaling_factor,
                             max_acceleration_scaling_factor);
 
     std::vector<double> joint_positions(dof);
@@ -230,7 +217,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
 
           // Check if decreasing acceleration of this joint actually decreases joint torque. Else, increase acceleration.
           double previous_torque = joint_torques.at(joint_idx);
-          joint_accelerations.at(joint_idx) *= (1 + accel_limit_decrement_factor);
+          joint_accelerations.at(joint_idx) *= (1 + accel_decrement_factor);
           if (!dynamics_solver.getTorques(joint_positions, joint_velocities, joint_accelerations,
                                           external_link_wrenches, joint_torques))
           {
@@ -239,11 +226,11 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
           }
           if (std::fabs(joint_torques.at(joint_idx)) < std::fabs(previous_torque))
           {
-            mutable_accel_limits.at(joint_models.at(joint_idx)->getName()) *= (1 + accel_limit_decrement_factor);
+            mutable_acceleration_limits.at(joint_models.at(joint_idx)->getName()) *= (1 + accel_decrement_factor);
           }
           else
           {
-            mutable_accel_limits.at(joint_models.at(joint_idx)->getName()) *= (1 - accel_limit_decrement_factor);
+            mutable_acceleration_limits.at(joint_models.at(joint_idx)->getName()) *= (1 - accel_decrement_factor);
           }
 
           iteration_needed = true;
@@ -255,11 +242,11 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
         break;
       }
     }  // for each waypoint
-  }  // while (iteration_needed && num_iterations < max_iterations)
+      }  // while (iteration_needed && num_iterations < max_iter)
 
-  if (num_iterations >= max_iterations && iteration_needed)
+  if (num_iterations >= max_iter && iteration_needed)
   {
-    if (reset_trajectory_after_max_iterations)
+    if (reset_trajectory_after_max_iter)
     {
       ROS_WARN_STREAM_NAMED(LOGNAME, "ITLP needs more than max_iterations; resetting trajectory");
       trajectory.setRobotTrajectoryMsg(initial_state, original_traj);

@@ -66,6 +66,15 @@ TEST(time_optimal_trajectory_generation, test_totg_with_torque_limits)
   auto robot_model = std::make_shared<moveit::core::RobotModel>(urdf_model, srdf_model);
   ASSERT_TRUE((bool)robot_model) << "Failed to load robot model";
 
+  // Set velocity and acceleration bounds for joint_a
+  moveit_msgs::JointLimits joint_limits;
+  joint_limits.joint_name = "joint_a";
+  joint_limits.has_velocity_limits = true;
+  joint_limits.max_velocity = 3.0;
+  joint_limits.has_acceleration_limits = true;
+  joint_limits.max_acceleration = 3.0;
+  robot_model->getJointModel("joint_a")->setVariableBounds(std::vector<moveit_msgs::JointLimits>{joint_limits});
+
   auto group = robot_model->getJointModelGroup("single_dof_group");
   ASSERT_TRUE((bool)group) << "Failed to load joint model group ";
   moveit::core::RobotState waypoint_state(robot_model);
@@ -86,8 +95,6 @@ TEST(time_optimal_trajectory_generation, test_totg_with_torque_limits)
   }();
   const std::vector<double> joint_torque_limits{ 250 };  // in N*m
   const double accel_limit_decrement_factor = 0.1;
-  const std::unordered_map<std::string, double> velocity_limits = { { "joint_a", 3 } };
-  const std::unordered_map<std::string, double> acceleration_limits = { { "joint_a", 3 } };
 
   trajectory_processing::IterativeTorqueLimitParameterization totg(0.1 /* path tolerance */, 0.01 /* resample dt */,
                                                                    0.001 /* min angle change */);
@@ -108,8 +115,8 @@ TEST(time_optimal_trajectory_generation, test_totg_with_torque_limits)
 
   bool totg_success =
       totg.computeTimeStampsWithTorqueLimits(trajectory, gravity_vector, external_link_wrenches, joint_torque_limits,
-                                             accel_limit_decrement_factor, velocity_limits, acceleration_limits,
-                                             1.0 /* vel scaling */, 1.0 /* accel scaling */);
+                                             1.0 /* vel scaling */, 1.0 /* accel scaling */,
+                                             accel_limit_decrement_factor);
   ASSERT_TRUE(totg_success) << "Failed to compute timestamps";
   double first_duration = trajectory.getDuration();
 
@@ -117,8 +124,8 @@ TEST(time_optimal_trajectory_generation, test_totg_with_torque_limits)
   const std::vector<double> lower_torque_limits{ 1 };  // in N*m
   totg_success =
       totg.computeTimeStampsWithTorqueLimits(trajectory, gravity_vector, external_link_wrenches, lower_torque_limits,
-                                             accel_limit_decrement_factor, velocity_limits, acceleration_limits,
-                                             1.0 /* accel scaling */, 1.0 /* vel scaling */);
+                                             1.0 /* vel scaling */, 1.0 /* accel scaling */,
+                                             accel_limit_decrement_factor);
   ASSERT_TRUE(totg_success) << "Failed to compute timestamps";
   double second_duration = trajectory.getDuration();
   EXPECT_GT(second_duration, first_duration) << "The second time parameterization should result in a longer duration";
