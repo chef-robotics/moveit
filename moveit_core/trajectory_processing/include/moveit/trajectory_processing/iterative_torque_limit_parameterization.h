@@ -44,6 +44,7 @@ namespace trajectory_processing
 class IterativeTorqueLimitParameterization
 {
 public:
+  // TimeOptimalTrajectoryGeneration defaults will be used for any parameters that are not specified.
   IterativeTorqueLimitParameterization(boost::optional<double> path_tolerance = boost::none,
                                        boost::optional<double> resample_dt = boost::none,
                                        boost::optional<double> min_angle_change = boost::none);
@@ -62,9 +63,9 @@ public:
    * \param joint_torque_limits Torque limits for each joint in N*m. All should be >0.
    * \param max_velocity_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
    * \param max_acceleration_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
-   * \param accel_limit_decrement_factor Must be in the range [0.01-0.2]. If not specified, default is 0.1.
+   * \param accel_limit_decrement_factor Must be in the range [0.01, 0.2]. If not specified, default is 0.1.
    *   This affects how fast acceleration limits are decreased while searching for a solution.
-   *   Time-optimality of the output is accurate to approximately 100*accel_limit_decrement_factor %.
+   *   Time-optimality of the output is accurate to approximately (100*accel_limit_decrement_factor)%.
    *   For example, if accel_limit_decrement_factor is 0.1, the output should be within 10% of time-optimal.
    * \param max_iterations Maximum number of times to do the TOTG->torque check->accel change loop.
    *   If not specified, default is 10.

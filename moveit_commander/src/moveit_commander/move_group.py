@@ -747,6 +747,50 @@ class MoveGroupCommander(object):
         max_iterations=None,  # type: Optional[int]
     ):
         # type: (...) -> RobotTrajectory
+        """
+        Retime a RobotTrajectory message using one of several time parameterization
+        algorithms.
+
+        Args:
+            ref_state_in: Reference state of the robot
+            traj_in: Trajectory to be retimed
+            velocity_scaling_factor: Factor to scale maximum joint
+                velocities (0.0, 1.0]. Default: 1.0
+            acceleration_scaling_factor: Factor to scale maximum joint
+                accelerations (0.0, 1.0]. Default: 1.0
+            algorithm: Time parameterization algorithm.
+                - "iterative_time_parameterization" (IPTP) (default)
+                - "iterative_spline_parameterization" (ISP)
+                - "time_optimal_trajectory_generation" (TOTG)
+                - "iterative_torque_limit_parameterization" (ITLP)
+            try_torque_stuffing: Whether to compute and store joint torques
+                in the returned trajectory. Default: True
+            gravity_vector: Gravity w.r.t. robot model base frame;
+                zero gravity if not specified. Default: None
+            external_link_wrenches: External forces on links; the number of
+                wrenches must match the number of links in the robot model.
+                Zero external wrenches if not specified. Default: None
+            path_tolerance: Path tolerance (rad or m) for TOTG/ITLP; if not
+                specified, a default value is used. See TOTG/ITLP docs for
+                details and default.
+            resample_dt: Resampling interval (s) for TOTG/ITLP; if not
+                specified, a default value is used. See TOTG/ITLP docs for
+                details and default.
+            min_angle_change: Minimum angle change (rad) for TOTG/ITLP;
+                if not specified, a default value is used. See TOTG/ITLP docs
+                for details and default.
+            joint_torque_limits: Joint torque limits (Nm) for ITLP;
+                Required for ITLP!
+            accel_limit_decrement_factor: Acceleration limit decrement factor
+                for ITLP; if not specified, a default value is used. See
+                ITLP docs for details and default.
+            max_iterations: Maximum number of iterations for ITLP; if not
+                specified, a default value is used. See ITLP docs for details
+                and default.
+
+        Returns:
+            Trajectory with time parameterization applied.
+        """
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
 

@@ -167,9 +167,9 @@ MOVEIT_CLASS_FORWARD(TimeOptimalTrajectoryGeneration);
 class TimeOptimalTrajectoryGeneration : public TimeParameterization
 {
 public:
-  TimeOptimalTrajectoryGeneration(boost::optional<double> path_tolerance = boost::none,
-                                  boost::optional<double> resample_dt = boost::none,
-                                  boost::optional<double> min_angle_change = boost::none);
+  TimeOptimalTrajectoryGeneration(boost::optional<double> path_tolerance = boost::none,  // default: 0.1 (rad or m)
+                                  boost::optional<double> resample_dt = boost::none,  // default: 0.01 (s)
+                                  boost::optional<double> min_angle_change = boost::none);  // default: 0.001 (rad)
 
   /**
    * \brief Compute a trajectory with waypoints spaced equally in time (according to resample_dt_).

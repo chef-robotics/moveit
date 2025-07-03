@@ -559,18 +559,18 @@ public:
   }
 
   /**
-   * @brief Computes joint torques for each waypoint in a RobotTrajectory message
-   * and stores them in the effort field.
+   * \brief Computes joint torques for each waypoint in a RobotTrajectory message
+   *   and stores them in the effort field.
    *
-   * @param trajectory_msg The trajectory to compute torques for (the effort field will be overwritten)
-   * @param robot_model The robot model to use for dynamics calculations.
-   * @param group_name Name of the joint group to compute torques for.
-   * @param gravity_vector The gravity vector to use in dynamics calculations.
-   * @param external_link_wrenches External wrenches (force/torque) acting on each link.
+   * \param[in,out] trajectory_msg The trajectory to compute torques for (the effort field will be overwritten)
+   * \param robot_model The robot model to use for dynamics calculations.
+   * \param group_name Name of the joint group to compute torques for.
+   * \param gravity_vector The gravity vector to use in dynamics calculations.
+   * \param external_link_wrenches External wrenches (force/torque) acting on each link.
    *
-   * @note No input validation is performed -- recommend calling in a try/catch.
-   * @note Assumes the joint order in trajectory_msg.joint_trajectory matches the
-   * active joint order in the robot model group.
+   * \note No input validation is performed -- recommend calling in a try/catch.
+   * \note Assumes the joint order in trajectory_msg.joint_trajectory matches the
+   *   active joint order in the robot model group.
    * TODO(cj): Provide a binding and expose this to MoveGroupInterface.
    */
   void stuffTorquesIntoRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory_msg,
@@ -593,31 +593,36 @@ public:
   }
 
   /**
-   * @brief Retime a RobotTrajectory message using one of several time parameterization algorithms.
+   * \brief Retime a RobotTrajectory message using one of several time parameterization algorithms.
    *
-   * @param ref_state_str Serialized RobotState message representing the reference state
-   * @param traj_str Serialized RobotTrajectory message to be retimed
-   * @param velocity_scaling_factor Factor to scale maximum joint velocities (0.0-1.0)
-   * @param acceleration_scaling_factor Factor to scale maximum joint accelerations (0.0-1.0)
-   * @param algorithm Time parameterization algorithm:
+   * \param ref_state_str Serialized RobotState message representing the reference state
+   * \param traj_str Serialized RobotTrajectory message to be retimed
+   * \param velocity_scaling_factor Factor to scale maximum joint velocities (0.0, 1.0]
+   * \param acceleration_scaling_factor Factor to scale maximum joint accelerations (0.0, 1.0]
+   * \param algorithm Time parameterization algorithm:
    *   - iterative_time_parameterization (IPTP)
    *   - iterative_spline_parameterization (ISP)
    *   - time_optimal_trajectory_generation (TOTG)
    *   - iterative_torque_limit_parameterization (ITLP)
-   * @param try_torque_stuffing Whether to compute and store joint torques in retimed trajectory (default: true)
-   * @param gravity_vector_obj Serialized Vector3 message for gravity w.r.t. robot model base frame;
-   *   If not specified, zero gravity is assumed.
-   * @param external_link_wrenches_obj List of serialized Wrench messages for external forces on links;
-   *   If not specified, zero external wrenches are assumed for all links.
+   * \param try_torque_stuffing Whether to compute and store joint torques in retimed trajectory (default: true)
+   * \param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. robot model base frame
+   *   (default: zero gravity)
+   * \param external_link_wrenches_obj Optional list of serialized Wrench messages for external forces on links
+   *   (default: zero external wrenches for all links)
    *   If specified, the number of wrenches must match the number of links in the robot model.
-   * @param path_tolerance_obj See TOTG and ITLP for details
-   * @param resample_dt_obj See TOTG and ITLP for details
-   * @param min_angle_change_obj See TOTG and ITLP for details
-   * @param joint_torque_limits_obj See ITLP for details; required if algorithm is ITLP!
-   * @param accel_limit_decrement_factor_obj See ITLP for details
-   * @param max_iterations_obj See ITLP for details
+   * \param path_tolerance_obj Optional double for TOTG/ITLP path tolerance (rad or m);
+   *   see TOTG/ITLP docs for details and default.
+   * \param resample_dt_obj Optional double for TOTG/ITLP resampling interval (s);
+   *   see TOTG/ITLP docs for details and default.
+   * \param min_angle_change_obj Optional double for TOTG/ITLP minimum angle change (rad);
+   *   see TOTG/ITLP docs for details and default.
+   * \param joint_torque_limits_obj Optional list of doubles for ITLP joint torque limits (Nm); required for ITLP.
+   * \param accel_limit_decrement_factor_obj Optional double for ITLP acceleration limit decrement factor;
+   *   see ITLP docs for details and default.
+   * \param max_iterations_obj Optional int for ITLP maximum number of iterations;
+   *   see ITLP docs for details and default.
    *
-   * @return Serialized RobotTrajectory message with time parameterization applied.
+   * \return Serialized RobotTrajectory message with time parameterization applied.
    */
   py_bindings_tools::ByteString retimeTrajectory(const py_bindings_tools::ByteString& ref_state_str,
                                                  const py_bindings_tools::ByteString& traj_str,
