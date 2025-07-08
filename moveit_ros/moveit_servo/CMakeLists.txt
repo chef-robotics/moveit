@@ -13,7 +13,7 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS)
 find_package(Eigen3 REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   control_msgs

@@ -26,6 +26,9 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
 )
 
+# Catkin insists we have a compile dependency on py3.8, remove it
+list(REMOVE_ITEM catkin_LIBRARIES /usr/lib/x86_64-linux-gnu/libpython3.8.so)
+
 find_package(Eigen3 REQUIRED)
 find_package(octomap REQUIRED)
 

@@ -36,7 +36,7 @@
   <depend>octomap_msgs</depend>
   <depend>pybind11_catkin</depend>
   <depend>random_numbers</depend>
-  <depend>roslib</depend>
+  <exec_depend>roslib</exec_depend>
   <depend>rostime</depend>
   <depend>rosconsole</depend>
   <depend>sensor_msgs</depend>

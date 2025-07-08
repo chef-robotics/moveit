@@ -1,10 +1,14 @@
 set(MOVEIT_LIB_NAME moveit_python_tools)
 
+find_package(Python REQUIRED COMPONENTS Development Interpreter)
+
 add_library(${MOVEIT_LIB_NAME}
   src/pybind_rosmsg_typecasters.cpp
 )
+
 add_dependencies(${MOVEIT_LIB_NAME} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${MOVEIT_LIB_NAME} ${catkin_LIBRARIES})
+target_link_libraries(${MOVEIT_LIB_NAME} ${Python_LIBRARIES} ${catkin_LIBRARIES})
+
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
 
 install(

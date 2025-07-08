@@ -58,7 +58,6 @@ COMPONENTS
   moveit_msgs
   octomap_msgs
   random_numbers
-  roslib
   rostime
   rosconsole
   sensor_msgs
@@ -71,6 +70,9 @@ COMPONENTS
   xmlrpcpp
   pybind11_catkin
 )
+
+# Catkin insists we have a compile dependency on py3.8, remove it
+list(REMOVE_ITEM catkin_LIBRARIES /usr/lib/x86_64-linux-gnu/libpython3.8.so)
 
 catkin_python_setup()
 
@@ -129,7 +131,8 @@ catkin_package(
     moveit_constraint_samplers
     moveit_planning_request_adapter
     moveit_profiler
-    moveit_python_tools
+    # Don't export this as a link target
+    # moveit_python_tools
     moveit_trajectory_processing
     moveit_distance_field
     moveit_collision_distance_field

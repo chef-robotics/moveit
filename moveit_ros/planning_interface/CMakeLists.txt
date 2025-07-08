@@ -28,14 +28,16 @@ find_package(catkin REQUIRED COMPONENTS
   rosconsole
 )
 
-find_package(PythonInterp REQUIRED)
-find_package(PythonLibs "${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}" REQUIRED)
+# Catkin insists we have a compile dependency on py3.8, remove it
+list(REMOVE_ITEM catkin_LIBRARIES /usr/lib/x86_64-linux-gnu/libpython3.8.so)
+
+find_package(Python REQUIRED COMPONENTS Development Interpreter)
 
 find_package(Boost REQUIRED)
 if(Boost_VERSION LESS 106700)
   set(BOOST_PYTHON_COMPONENT python)
 else()
-  set(BOOST_PYTHON_COMPONENT python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR})
+  set(BOOST_PYTHON_COMPONENT python${Python_VERSION_MAJOR}${Python_VERSION_MINOR})
 endif()
 
 find_package(Boost REQUIRED COMPONENTS
