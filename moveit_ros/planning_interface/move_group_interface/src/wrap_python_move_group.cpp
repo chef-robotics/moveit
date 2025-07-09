@@ -557,39 +557,66 @@ public:
       result.push_back(wrench_msg);
     }
   }
-
   /**
-   * \brief Computes joint torques for each waypoint in a RobotTrajectory message
-   *   and stores them in the effort field.
+   * \brief Compute joint torques for each point in a RobotTrajectory message,
+   *   and store in the point's `effort` field.
    *
-   * \param[in,out] trajectory_msg The trajectory to compute torques for (the effort field will be overwritten)
-   * \param robot_model The robot model to use for dynamics calculations.
-   * \param group_name Name of the joint group to compute torques for.
-   * \param gravity_vector The gravity vector to use in dynamics calculations.
-   * \param external_link_wrenches External wrenches (force/torque) acting on each link.
+   * \param traj_str Serialized RobotTrajectory message to compute torques for
+   * \param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. robot model base frame
+   *   (default: zero gravity)
+   * \param external_link_wrenches_obj Optional list of serialized Wrench messages for external forces on links
+   *   (default: zero external wrenches for all links)
+   *   If specified, the number of wrenches must match the number of links in the robot model.
    *
-   * \note No input validation is performed -- recommend calling in a try/catch.
-   * \note Assumes the joint order in trajectory_msg.joint_trajectory matches the
-   *   active joint order in the robot model group.
-   * TODO(cj): Provide a binding and expose this to MoveGroupInterface.
+   * \return Serialized RobotTrajectory message with torques stuffed into the `effort` field.
    */
-  void stuffTorquesIntoRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory_msg,
-                                          const robot_model::RobotModelConstPtr& robot_model,
-                                          const std::string& group_name,
-                                          const geometry_msgs::Vector3& gravity_vector,
-                                          const std::vector<geometry_msgs::Wrench>& external_link_wrenches)
+  py_bindings_tools::ByteString stuffTorquesIntoTrajectory(const py_bindings_tools::ByteString& traj_str,
+                                                           const bp::object& gravity_vector_obj = bp::object(),
+                                                           const bp::object& external_link_wrenches_obj = bp::object())
   {
-    dynamics_solver::DynamicsSolver dynamics_solver(robot_model, group_name, gravity_vector);
+    const auto group_name = getName();
+    const auto robot_model = getRobotModel();
 
-    std::vector<double> joint_torques(trajectory_msg.joint_trajectory.joint_names.size());
-    for (auto& point : trajectory_msg.joint_trajectory.points)
+    // Convert the python arguments to C++ objects.
+    // Need to do these conversions before GIL is released!
+    moveit_msgs::RobotTrajectory traj_msg;
+    py_bindings_tools::deserializeMsg(traj_str, traj_msg);
+
+    geometry_msgs::Vector3 gravity_vector;  // Default-constructed as zero vector
+    if (!gravity_vector_obj.is_none())
     {
-      if (dynamics_solver.getTorques(point.positions, point.velocities, point.accelerations,
-                                     external_link_wrenches, joint_torques))
-      {
-        point.effort = joint_torques;
-      }
+      py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj),
+                                        gravity_vector);
     }
+
+    std::vector<geometry_msgs::Wrench> external_link_wrenches;
+    if (!external_link_wrenches_obj.is_none())
+    {
+      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
+    }
+    if (external_link_wrenches.empty())
+    {
+      const robot_model::JointModelGroup* group = robot_model->getJointModelGroup(group_name);
+      external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
+    }
+
+    // Release GIL and do the actual torque computation.
+    {
+      GILReleaser gr;
+
+      try
+      {
+        stuffTorquesIntoRobotTrajectoryMsg(traj_msg, robot_model, group_name, gravity_vector,
+                                           external_link_wrenches);
+      }
+      catch (const std::exception& e)
+      {
+        ROS_ERROR_NAMED("move_group_py", "Failed to stuff torques into trajectory message: [%s]", e.what());
+        return py_bindings_tools::ByteString("");
+      }
+    } // End of GILReleaser.
+
+    return py_bindings_tools::serializeMsg(traj_msg);
   }
 
   /**
@@ -784,6 +811,40 @@ public:
       return py_bindings_tools::ByteString("");
     }
   }
+
+private:
+  /**
+   * \brief Computes joint torques for each waypoint in a RobotTrajectory message
+   *   and stores them in the effort field.
+   *
+   * \param[in,out] trajectory_msg The trajectory to compute torques for (the effort field will be overwritten)
+   * \param robot_model The robot model to use for dynamics calculations.
+   * \param group_name Name of the joint group to compute torques for.
+   * \param gravity_vector The gravity vector to use in dynamics calculations.
+   * \param external_link_wrenches External wrenches (force/torque) acting on each link.
+   *
+   * \note No input validation is performed -- recommend calling in a try/catch.
+   * \note Assumes the joint order in trajectory_msg.joint_trajectory matches the
+   *   active joint order in the robot model group.
+   */
+  void stuffTorquesIntoRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory_msg,
+                                          const robot_model::RobotModelConstPtr& robot_model,
+                                          const std::string& group_name,
+                                          const geometry_msgs::Vector3& gravity_vector,
+                                          const std::vector<geometry_msgs::Wrench>& external_link_wrenches)
+  {
+    dynamics_solver::DynamicsSolver dynamics_solver(robot_model, group_name, gravity_vector);
+
+    std::vector<double> joint_torques(trajectory_msg.joint_trajectory.joint_names.size());
+    for (auto& point : trajectory_msg.joint_trajectory.points)
+    {
+      if (dynamics_solver.getTorques(point.positions, point.velocities, point.accelerations,
+                                     external_link_wrenches, joint_torques))
+      {
+        point.effort = joint_torques;
+      }
+    }
+  }
 };
 
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(getJacobianMatrixOverloads, getJacobianMatrixPython, 1, 2)
@@ -921,6 +982,7 @@ static void wrap_move_group_interface()
   move_group_interface_class.def("set_support_surface_name", &MoveGroupInterfaceWrapper::setSupportSurfaceName);
   move_group_interface_class.def("attach_object", &MoveGroupInterfaceWrapper::attachObjectPython);
   move_group_interface_class.def("detach_object", &MoveGroupInterfaceWrapper::detachObject);
+  move_group_interface_class.def("stuff_torques_into_trajectory", &MoveGroupInterfaceWrapper::stuffTorquesIntoTrajectory);
   move_group_interface_class.def("retime_trajectory", &MoveGroupInterfaceWrapper::retimeTrajectory);
   move_group_interface_class.def("get_named_targets", &MoveGroupInterfaceWrapper::getNamedTargetsPython);
   move_group_interface_class.def("get_named_target_values", &MoveGroupInterfaceWrapper::getNamedTargetValuesPython);

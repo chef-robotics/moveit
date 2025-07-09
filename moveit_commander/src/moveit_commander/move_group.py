@@ -824,6 +824,49 @@ class MoveGroupCommander(object):
         traj_out.deserialize(ser_traj_out)
         return traj_out
 
+    def stuff_torques_into_trajectory(
+        self,
+        traj_in,  # type: RobotTrajectory
+        gravity_vector=None,  # type: Optional[Vector3]
+        external_link_wrenches=None,  # type: Optional[List[Wrench]]
+    ):
+        # type: (...) -> RobotTrajectory
+        """
+        Compute joint torques for each waypoint in a RobotTrajectory message,
+        and store in the point's `effort` field.
+
+        Args:
+            traj_in: Trajectory to compute torques for
+            gravity_vector: Gravity w.r.t. robot model base frame;
+                zero gravity if not specified. Default: None
+            external_link_wrenches: External forces on links; the number of
+                wrenches must match the number of links in the robot model.
+                Zero external wrenches if not specified. Default: None
+
+        Returns:
+            Trajectory with torques stuffed into the `effort` field.
+        """
+        ser_traj_in = conversions.msg_to_string(traj_in)
+
+        ser_gravity_vector = None
+        if gravity_vector is not None:
+            ser_gravity_vector = conversions.msg_to_string(gravity_vector)
+
+        ser_external_link_wrenches = None
+        if external_link_wrenches is not None:
+            ser_external_link_wrenches = [
+                conversions.msg_to_string(w) for w in external_link_wrenches
+            ]
+
+        ser_traj_out = self._g.stuff_torques_into_trajectory(
+            ser_traj_in,
+            ser_gravity_vector,
+            ser_external_link_wrenches,
+        )
+        traj_out = RobotTrajectory()
+        traj_out.deserialize(ser_traj_out)
+        return traj_out
+
     def get_jacobian_matrix(self, joint_values, reference_point=None):
         """Get the jacobian matrix of the group as a list"""
         return self._g.get_jacobian_matrix(
