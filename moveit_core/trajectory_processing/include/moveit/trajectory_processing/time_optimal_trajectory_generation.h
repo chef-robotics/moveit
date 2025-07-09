@@ -39,10 +39,11 @@
 #ifndef MOVEIT_TRAJECTORY_PROCESSING_TIME_OPTIMAL_TRAJECTORY_GENERATION_H
 #define MOVEIT_TRAJECTORY_PROCESSING_TIME_OPTIMAL_TRAJECTORY_GENERATION_H
 
-#include <Eigen/Core>
-#include <list>
 #include <moveit/robot_trajectory/robot_trajectory.h>
 #include <moveit/trajectory_processing/time_parameterization.h>
+#include <boost/optional.hpp>
+#include <Eigen/Core>
+#include <list>
 #include <unordered_map>
 
 namespace trajectory_processing
@@ -166,8 +167,9 @@ MOVEIT_CLASS_FORWARD(TimeOptimalTrajectoryGeneration);
 class TimeOptimalTrajectoryGeneration : public TimeParameterization
 {
 public:
-  TimeOptimalTrajectoryGeneration(const double path_tolerance = 0.1, const double resample_dt = 0.1,
-                                  const double min_angle_change = 0.001);
+  TimeOptimalTrajectoryGeneration(boost::optional<double> path_tolerance = boost::none,  // default: 0.1 (rad or m)
+                                  boost::optional<double> resample_dt = boost::none,  // default: 0.1 (s)
+                                  boost::optional<double> min_angle_change = boost::none);  // default: 0.001 (rad)
 
   /**
    * \brief Compute a trajectory with waypoints spaced equally in time (according to resample_dt_).

@@ -50,10 +50,71 @@
 #include <streambuf>
 #include <algorithm>
 
+// XML parsing
+#include <tinyxml.h>
+
 #ifdef _WIN32
 #define popen _popen
 #define pclose _pclose
 #endif
+
+namespace
+{
+/** \brief Parse `chef_dynamics` for a single `joint` element */
+moveit::core::JointDynamics parseJointDynamics(TiXmlElement* joint_elem)
+{
+  moveit::core::JointDynamics joint_dynamics;
+  TiXmlElement* chef_dynamics_elem = joint_elem->FirstChildElement("chef_dynamics");
+  if (!chef_dynamics_elem)
+    return joint_dynamics;
+
+  // Parse all required attributes - if any fail, joint dynamics is incomplete
+  if (chef_dynamics_elem->QueryDoubleAttribute("coulomb_friction", &joint_dynamics.coulomb_friction) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("viscous_damping", &joint_dynamics.viscous_damping) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("gear_ratio", &joint_dynamics.gear_ratio) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("rotor_inertia", &joint_dynamics.rotor_inertia) == TIXML_SUCCESS &&
+      chef_dynamics_elem->QueryDoubleAttribute("reducer_inertia", &joint_dynamics.reducer_inertia) == TIXML_SUCCESS)
+  {
+    joint_dynamics.has_joint_dynamics = true;
+  }
+
+  return joint_dynamics;
+}
+
+/** \brief Construct a map of joint dynamics from URDF XML string */
+moveit::core::JointDynamicsMap parseJointDynamicsFromURDF(const std::string& urdf_string)
+{
+  moveit::core::JointDynamicsMap joint_dynamics_map;
+
+  if (urdf_string.empty())
+    return joint_dynamics_map;
+
+  TiXmlDocument doc;
+  doc.Parse(urdf_string.c_str());
+
+  if (doc.Error())
+  {
+    ROS_ERROR_NAMED("rdf_loader", "Failed to parse URDF XML for motor dynamics: %s", doc.ErrorDesc());
+    return joint_dynamics_map;
+  }
+
+  TiXmlElement* robot = doc.FirstChildElement("robot");
+  if (!robot)
+    return joint_dynamics_map;
+  
+  for (TiXmlElement* joint_elem = robot->FirstChildElement("joint"); joint_elem;
+       joint_elem = joint_elem->NextSiblingElement("joint"))
+  {
+    const char* joint_name = joint_elem->Attribute("name");
+    if (!joint_name)
+      continue;
+
+    joint_dynamics_map[joint_name] = parseJointDynamics(joint_elem);
+  }
+
+  return joint_dynamics_map;
+}
+}  // unnamed namespace
 
 rdf_loader::RDFLoader::RDFLoader(const std::string& robot_description)
 {
@@ -77,6 +138,8 @@ rdf_loader::RDFLoader::RDFLoader(const std::string& robot_description)
     return;
   }
   urdf_ = std::move(urdf);
+
+  joint_dynamics_map_ = parseJointDynamicsFromURDF(content);
 
   const std::string srdf_description(robot_description_ + "_semantic");
   std::string scontent;
@@ -107,6 +170,8 @@ rdf_loader::RDFLoader::RDFLoader(const std::string& urdf_string, const std::stri
   urdf_.reset(umodel);
   if (umodel->initString(urdf_string))
   {
+    joint_dynamics_map_ = parseJointDynamicsFromURDF(urdf_string);
+
     srdf_.reset(new srdf::Model());
     if (!srdf_->initString(*urdf_, srdf_string))
     {

@@ -35,11 +35,14 @@
 /* Author: Sachin Chitta */
 
 #include <moveit/dynamics_solver/dynamics_solver.h>
+#include <moveit/robot_model/joint_model.h>
 
 // KDL
 #include <kdl/jntarray.hpp>
 #include <kdl_parser/kdl_parser.hpp>
 #include <kdl/tree.hpp>
+
+#include <limits>
 
 namespace dynamics_solver
 {
@@ -147,6 +150,14 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
                                        "Check error logs.");
     return false;
   }
+  // NB: The `kdl_chain_` is constructed from the active joint models.
+  const std::vector<const moveit::core::JointModel*>& joint_models = joint_model_group_->getActiveJointModels();
+  if (joint_models.size() != num_joints_)
+  {
+    ROS_ERROR_NAMED("dynamics_solver", "Active joint vector should be size %d, but is %zu",
+                                       num_joints_, joint_models.size());
+    return false;
+  }
   if (joint_angles.size() != num_joints_)
   {
     ROS_ERROR_NAMED("dynamics_solver", "Joint angles vector should be size %d", num_joints_);
@@ -201,8 +212,43 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
     return false;
   }
 
-  for (unsigned int i = 0; i < num_joints_; ++i)
-    torques[i] = kdl_torques(i);
+  for (unsigned int i = 0; i < joint_models.size(); ++i)
+  {
+    // Final joint torque is the sum of the link torque, motor inertia torque, and friction torque
+    double link_torque = kdl_torques(i);
+    double motor_inertia_torque = 0.0;
+    double friction_torque = 0.0;
+
+    // Compute torque from joint dynamics
+    const moveit::core::JointModel* joint_model = joint_models[i];
+    if (joint_model->hasJointDynamics())
+    {
+      const moveit::core::JointDynamics& joint_dynamics = joint_model->getJointDynamics();
+
+      // Compute reflected motor inertia torque
+      motor_inertia_torque = joint_dynamics.gear_ratio * joint_dynamics.gear_ratio *
+                             (joint_dynamics.rotor_inertia + joint_dynamics.reducer_inertia) * joint_accelerations[i];
+
+      // Compute friction torque
+      double velocity = joint_velocities[i];
+      if (std::abs(velocity) > std::numeric_limits<double>::epsilon())
+      {
+        friction_torque = joint_dynamics.coulomb_friction * std::copysign(1.0, velocity) +
+                          joint_dynamics.viscous_damping * velocity;
+      }
+      else
+      {
+        // At/near rest, friction opposes the applied torque up to Coulomb friction amount.
+        // We do NOT model the Stribeck effect.
+        // NB: `motor_inertia_torque` should contribute very little because acceleration should be near-zero.
+        double applied_torque = link_torque + motor_inertia_torque;
+        friction_torque = std::copysign(std::min(std::abs(applied_torque), joint_dynamics.coulomb_friction),
+                                        -applied_torque);
+      }
+    }
+
+    torques[i] = link_torque + motor_inertia_torque + friction_torque;
+  }
 
   return true;
 }
