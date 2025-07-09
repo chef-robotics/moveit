@@ -226,9 +226,8 @@ bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const s
       const moveit::core::JointDynamics& joint_dynamics = joint_model->getJointDynamics();
 
       // Compute reflected motor inertia torque
-      double motor_inertia = joint_dynamics.rotor_inertia + joint_dynamics.reducer_inertia;
-      double motor_inertia_torque = joint_dynamics.gear_ratio * joint_dynamics.gear_ratio *
-                                    motor_inertia * joint_accelerations[i];
+      motor_inertia_torque = joint_dynamics.gear_ratio * joint_dynamics.gear_ratio *
+                             (joint_dynamics.rotor_inertia + joint_dynamics.reducer_inertia) * joint_accelerations[i];
 
       // Compute friction torque
       double velocity = joint_velocities[i];
