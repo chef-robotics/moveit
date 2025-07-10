@@ -736,7 +736,7 @@ class MoveGroupCommander(object):
         velocity_scaling_factor=1.0,  # type: float
         acceleration_scaling_factor=1.0,  # type: float
         algorithm="iterative_time_parameterization",  # type: str
-        try_torque_stuffing=True,  # type: bool
+        try_torque_injection=True,  # type: bool
         gravity_vector=None,  # type: Optional[Vector3]
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
         path_tolerance=None,  # type: Optional[float]
@@ -763,7 +763,7 @@ class MoveGroupCommander(object):
                 - "iterative_spline_parameterization" (ISP)
                 - "time_optimal_trajectory_generation" (TOTG)
                 - "iterative_torque_limit_parameterization" (ITLP)
-            try_torque_stuffing: Whether to compute and store joint torques
+            try_torque_injection: Whether to compute and store joint torques
                 in the returned trajectory. Default: True
             gravity_vector: Gravity w.r.t. robot model base frame;
                 zero gravity if not specified. Default: None
@@ -810,7 +810,7 @@ class MoveGroupCommander(object):
             velocity_scaling_factor,
             acceleration_scaling_factor,
             algorithm,
-            try_torque_stuffing,
+            try_torque_injection,
             ser_gravity_vector,
             ser_external_link_wrenches,
             path_tolerance,
@@ -819,6 +819,49 @@ class MoveGroupCommander(object):
             joint_torque_limits,
             accel_limit_decrement_factor,
             max_iterations,
+        )
+        traj_out = RobotTrajectory()
+        traj_out.deserialize(ser_traj_out)
+        return traj_out
+
+    def inject_trajectory_torques(
+        self,
+        traj_in,  # type: RobotTrajectory
+        gravity_vector=None,  # type: Optional[Vector3]
+        external_link_wrenches=None,  # type: Optional[List[Wrench]]
+    ):
+        # type: (...) -> RobotTrajectory
+        """
+        Compute joint torques for each waypoint in a RobotTrajectory message,
+        and store in the point's `effort` field.
+
+        Args:
+            traj_in: Trajectory to compute torques for
+            gravity_vector: Gravity w.r.t. robot model base frame;
+                zero gravity if not specified. Default: None
+            external_link_wrenches: External forces on links; the number of
+                wrenches must match the number of links in the robot model.
+                Zero external wrenches if not specified. Default: None
+
+        Returns:
+            Trajectory with torques injected into the `effort` field.
+        """
+        ser_traj_in = conversions.msg_to_string(traj_in)
+
+        ser_gravity_vector = None
+        if gravity_vector is not None:
+            ser_gravity_vector = conversions.msg_to_string(gravity_vector)
+
+        ser_external_link_wrenches = None
+        if external_link_wrenches is not None:
+            ser_external_link_wrenches = [
+                conversions.msg_to_string(w) for w in external_link_wrenches
+            ]
+
+        ser_traj_out = self._g.inject_trajectory_torques(
+            ser_traj_in,
+            ser_gravity_vector,
+            ser_external_link_wrenches,
         )
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)
