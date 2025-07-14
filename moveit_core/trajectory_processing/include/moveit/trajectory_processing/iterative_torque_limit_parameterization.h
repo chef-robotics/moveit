@@ -71,6 +71,8 @@ public:
    *   If not specified, default is 10.
    * \param reset_traj_after_max_iterations Whether to reset `trajectory` to its initial state when more than
    *   `max_iterations` iterations is needed to get all torques under their limits. If not specified, default is false.
+   * \param[out] iterations_taken Optional pointer to store the number of iterations taken to converge.
+   *   If nullptr (default), the iteration count is not returned.
    */
   bool computeTimeStampsWithTorqueLimits(
       robot_trajectory::RobotTrajectory& trajectory, const geometry_msgs::Vector3& gravity_vector,
@@ -78,7 +80,8 @@ public:
       const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
       boost::optional<double> accel_limit_decrement_factor = boost::none,
       boost::optional<size_t> max_iterations = boost::none,
-      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none) const;
+      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none,
+      size_t* iterations_taken = nullptr) const;
 
 private:
   TimeOptimalTrajectoryGeneration totg_;

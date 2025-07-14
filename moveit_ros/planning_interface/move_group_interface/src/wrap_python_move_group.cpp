@@ -665,6 +665,7 @@ public:
                                                  const bp::object& accel_limit_decrement_factor_obj = bp::object(),
                                                  const bp::object& max_iterations_obj = bp::object())
   {
+    ROS_ERROR_STREAM_NAMED("move_group_py", "Retiming trajectory with algorithm: " << algorithm);
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
 
@@ -742,7 +743,7 @@ public:
         time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
                                                      joint_torque_limits, velocity_scaling_factor,
                                                      acceleration_scaling_factor, accel_limit_decrement_factor,
-                                                     max_iterations);
+                                                     max_iterations, boost::none, nullptr);
       }
       else if (algorithm == "time_optimal_trajectory_generation")
       {
@@ -773,6 +774,144 @@ public:
     }  // End of GILReleaser.
 
     return py_bindings_tools::serializeMsg(traj_msg);
+  }
+
+  /**
+   * \brief Retime a RobotTrajectory message using the iterative torque limit parameterization algorithm.
+   * This method specifically calls ITLP and returns both the trajectory and the iteration count.
+   *
+   * \param ref_state_str Serialized RobotState message representing the reference state
+   * \param traj_str Serialized RobotTrajectory message to be retimed
+   * \param velocity_scaling_factor Factor to scale maximum joint velocities (0.0, 1.0]
+   * \param acceleration_scaling_factor Factor to scale maximum joint accelerations (0.0, 1.0]
+   * \param joint_torque_limits_obj List of doubles for ITLP joint torque limits (Nm); required for ITLP.
+   * \param try_torque_injection Whether to compute and store joint torques in retimed trajectory (default: true)
+   * \param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. robot model base frame
+   *   (default: zero gravity)
+   * \param external_link_wrenches_obj Optional list of serialized Wrench messages for external forces on links
+   *   (default: zero external wrenches for all links)
+   *   If specified, the number of wrenches must match the number of links in the robot model.
+   * \param path_tolerance_obj Optional double for ITLP path tolerance (rad or m);
+   *   see ITLP docs for details and default.
+   * \param resample_dt_obj Optional double for ITLP resampling interval (s);
+   *   see ITLP docs for details and default.
+   * \param min_angle_change_obj Optional double for ITLP minimum angle change (rad);
+   *   see ITLP docs for details and default.
+   * \param accel_limit_decrement_factor_obj Optional double for ITLP acceleration limit decrement factor;
+   *   see ITLP docs for details and default.
+   * \param max_iterations_obj Optional int for ITLP maximum number of iterations;
+   *   see ITLP docs for details and default.
+   *
+   * \return Tuple containing (serialized RobotTrajectory message, iteration count).
+   */
+  bp::tuple retimeTrajectoryWithItlp(const py_bindings_tools::ByteString& ref_state_str,
+                                     const py_bindings_tools::ByteString& traj_str,
+                                     double velocity_scaling_factor, double acceleration_scaling_factor,
+                                     const bp::object& joint_torque_limits_obj,
+                                     bool try_torque_injection = true,
+                                     const bp::object& gravity_vector_obj = bp::object(),
+                                     const bp::object& external_link_wrenches_obj = bp::object(),
+                                     const bp::object& path_tolerance_obj = bp::object(),
+                                     const bp::object& resample_dt_obj = bp::object(),
+                                     const bp::object& min_angle_change_obj = bp::object(),
+                                     const bp::object& accel_limit_decrement_factor_obj = bp::object(),
+                                     const bp::object& max_iterations_obj = bp::object())
+  {
+    const auto group_name = getName();
+    const auto robot_model = getRobotModel();
+
+    // Validate the robot reference state.
+    moveit_msgs::RobotState ref_state_msg;
+    py_bindings_tools::deserializeMsg(ref_state_str, ref_state_msg);
+    moveit::core::RobotState ref_state_obj(robot_model);
+    if (!moveit::core::robotStateMsgToRobotState(ref_state_msg, ref_state_obj, true))
+    {
+      ROS_ERROR_NAMED("move_group_py", "Unable to convert RobotState message to RobotState instance.");
+      return bp::make_tuple(py_bindings_tools::ByteString(""), 0);
+    }
+
+    // Convert the remaining python arguments to C++ objects.
+    // Need to do these conversions before GIL is released!
+    moveit_msgs::RobotTrajectory traj_msg;
+    py_bindings_tools::deserializeMsg(traj_str, traj_msg);
+
+    geometry_msgs::Vector3 gravity_vector;  // Default-constructed as zero vector
+    if (!gravity_vector_obj.is_none())
+    {
+      py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj), gravity_vector);
+    }
+
+    std::vector<geometry_msgs::Wrench> external_link_wrenches;
+    if (!external_link_wrenches_obj.is_none())
+    {
+      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
+    }
+    if (external_link_wrenches.empty())
+    {
+      const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(group_name);
+      external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
+    }
+
+    std::vector<double> joint_torque_limits;
+    if (!joint_torque_limits_obj.is_none())
+    {
+      joint_torque_limits = py_bindings_tools::doubleFromList(joint_torque_limits_obj);
+    }
+    else
+    {
+      ROS_ERROR_NAMED("move_group_py", "joint_torque_limits are required for ITLP algorithm.");
+      return bp::make_tuple(py_bindings_tools::ByteString(""), 0);
+    }
+
+    // Convert optional parameters to boost::optional
+    boost::optional<double> path_tolerance = !path_tolerance_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(path_tolerance_obj)) : boost::none;
+    boost::optional<double> resample_dt = !resample_dt_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(resample_dt_obj)) : boost::none;
+    boost::optional<double> min_angle_change = !min_angle_change_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(min_angle_change_obj)) : boost::none;
+    boost::optional<double> accel_limit_decrement_factor = !accel_limit_decrement_factor_obj.is_none() ?
+        boost::optional<double>(bp::extract<double>(accel_limit_decrement_factor_obj)) : boost::none;
+    boost::optional<size_t> max_iterations = !max_iterations_obj.is_none() ?
+        boost::optional<size_t>(bp::extract<size_t>(max_iterations_obj)) : boost::none;
+
+    size_t iterations_taken = 0;
+
+    // Release GIL and do the actual retiming.
+    {
+      GILReleaser gr;
+
+      robot_trajectory::RobotTrajectory traj_obj(robot_model, group_name);
+      traj_obj.setRobotTrajectoryMsg(ref_state_obj, traj_msg);
+
+      trajectory_processing::IterativeTorqueLimitParameterization time_param(path_tolerance, resample_dt, min_angle_change);
+
+      if (!time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
+                                                       joint_torque_limits, velocity_scaling_factor,
+                                                       acceleration_scaling_factor, accel_limit_decrement_factor,
+                                                       max_iterations, boost::none, &iterations_taken))
+      {
+        ROS_ERROR_NAMED("move_group_py", "ITLP algorithm failed to compute time stamps.");
+        return bp::make_tuple(py_bindings_tools::ByteString(""), iterations_taken);
+      }
+
+      traj_obj.getRobotTrajectoryMsg(traj_msg);
+
+      if (try_torque_injection)
+      {
+        try
+        {
+          injectTorquesIntoRobotTrajectoryMsg(traj_msg, robot_model, group_name, gravity_vector,
+                                              external_link_wrenches);
+        }
+        catch (const std::exception& e)
+        {
+          ROS_WARN_NAMED("move_group_py", "Failed to inject torques into trajectory message: [%s]", e.what());
+        }
+      }
+    }  // End of GILReleaser.
+
+    return bp::make_tuple(py_bindings_tools::serializeMsg(traj_msg), iterations_taken);
   }
 
   Eigen::MatrixXd getJacobianMatrixPython(const bp::list& joint_values, const bp::object& reference_point = bp::object())
@@ -982,6 +1121,7 @@ static void wrap_move_group_interface()
   move_group_interface_class.def("detach_object", &MoveGroupInterfaceWrapper::detachObject);
   move_group_interface_class.def("inject_trajectory_torques", &MoveGroupInterfaceWrapper::injectTrajectoryTorques);
   move_group_interface_class.def("retime_trajectory", &MoveGroupInterfaceWrapper::retimeTrajectory);
+  move_group_interface_class.def("retime_trajectory_with_itlp", &MoveGroupInterfaceWrapper::retimeTrajectoryWithItlp);
   move_group_interface_class.def("get_named_targets", &MoveGroupInterfaceWrapper::getNamedTargetsPython);
   move_group_interface_class.def("get_named_target_values", &MoveGroupInterfaceWrapper::getNamedTargetValuesPython);
   move_group_interface_class.def("get_current_state_bounded", &MoveGroupInterfaceWrapper::getCurrentStateBoundedPython);

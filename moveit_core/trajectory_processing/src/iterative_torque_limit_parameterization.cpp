@@ -57,7 +57,8 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     const std::vector<geometry_msgs::Wrench>& external_link_wrenches, const std::vector<double>& joint_torque_limits,
     const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
     boost::optional<double> accel_limit_decrement_factor, boost::optional<size_t> max_iterations,
-    boost::optional<bool> reset_trajectory_after_max_iterations) const
+    boost::optional<bool> reset_trajectory_after_max_iterations,
+    size_t* iterations_taken) const
 {
   // 1. Call computeTimeStamps() to time-parameterize the trajectory with given vel/accel limits.
   // 2. Run forward dynamics to check if torque limits are violated at any waypoint.
@@ -66,6 +67,13 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
   const double accel_decrement_factor = accel_limit_decrement_factor.get_value_or(0.1);
   const size_t max_iter = max_iterations.get_value_or(10);
   const bool reset_trajectory_after_max_iter = reset_trajectory_after_max_iterations.get_value_or(false);
+
+  size_t num_iterations = 0;
+
+  if (iterations_taken)
+  {
+    *iterations_taken = 0;
+  }
 
   if (trajectory.empty())
     return true;
@@ -165,7 +173,6 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
   moveit::core::RobotState initial_state = trajectory.getFirstWayPoint();
 
   bool iteration_needed = true;
-  size_t num_iterations = 0;
 
   while (iteration_needed && num_iterations < max_iter)
   {
@@ -242,7 +249,12 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
         break;
       }
     }  // for each waypoint
-      }  // while (iteration_needed && num_iterations < max_iter)
+  }  // while (iteration_needed && num_iterations < max_iter)
+
+  if (iterations_taken)
+  {
+    *iterations_taken = num_iterations;
+  }
 
   if (num_iterations >= max_iter && iteration_needed)
   {

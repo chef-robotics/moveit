@@ -34,6 +34,7 @@
 
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 from geometry_msgs.msg import Pose, PoseStamped, Vector3, Wrench
 from moveit_msgs.msg import (
@@ -823,6 +824,96 @@ class MoveGroupCommander(object):
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)
         return traj_out
+
+    def retime_trajectory_with_itlp(
+        self,
+        ref_state_in,  # type: RobotState
+        traj_in,  # type: RobotTrajectory
+        joint_torque_limits,  # type: List[float]
+        velocity_scaling_factor=1.0,  # type: float
+        acceleration_scaling_factor=1.0,  # type: float
+        try_torque_injection=True,  # type: bool
+        gravity_vector=None,  # type: Optional[Vector3]
+        external_link_wrenches=None,  # type: Optional[List[Wrench]]
+        path_tolerance=None,  # type: Optional[float]
+        resample_dt=None,  # type: Optional[float]
+        min_angle_change=None,  # type: Optional[float]
+        accel_limit_decrement_factor=None,  # type: Optional[float]
+        max_iterations=None,  # type: Optional[int]
+    ):
+        # type: (...) -> Tuple[RobotTrajectory, int]
+        """
+        Retime a RobotTrajectory message using the iterative torque limit
+        parameterization algorithm. This method specifically calls ITLP and
+        returns both the trajectory and the iteration count.
+
+        Args:
+            ref_state_in: Reference state of the robot
+            traj_in: Trajectory to be retimed
+            joint_torque_limits: Joint torque limits (Nm) for ITLP; Required!
+            velocity_scaling_factor: Factor to scale maximum joint
+                velocities (0.0, 1.0]. Default: 1.0
+            acceleration_scaling_factor: Factor to scale maximum joint
+                accelerations (0.0, 1.0]. Default: 1.0
+            try_torque_injection: Whether to compute and store joint torques
+                in the returned trajectory. Default: True
+            gravity_vector: Gravity w.r.t. robot model base frame;
+                zero gravity if not specified. Default: None
+            external_link_wrenches: External forces on links; the number of
+                wrenches must match the number of links in the robot model.
+                Zero external wrenches if not specified. Default: None
+            path_tolerance: Path tolerance (rad or m) for ITLP; if not
+                specified, a default value is used. See ITLP docs for
+                details and default.
+            resample_dt: Resampling interval (s) for ITLP; if not
+                specified, a default value is used. See ITLP docs for
+                details and default.
+            min_angle_change: Minimum angle change (rad) for ITLP;
+                if not specified, a default value is used. See ITLP docs
+                for details and default.
+            accel_limit_decrement_factor: Acceleration limit decrement factor
+                for ITLP; if not specified, a default value is used. See
+                ITLP docs for details and default.
+            max_iterations: Maximum number of iterations for ITLP; if not
+                specified, a default value is used. See ITLP docs for details
+                and default.
+
+        Returns:
+            Tuple containing (trajectory with time parameterization applied,
+            number of iterations taken by ITLP).
+        """
+        ser_ref_state_in = conversions.msg_to_string(ref_state_in)
+        ser_traj_in = conversions.msg_to_string(traj_in)
+
+        ser_gravity_vector = None
+        if gravity_vector is not None:
+            ser_gravity_vector = conversions.msg_to_string(gravity_vector)
+
+        ser_external_link_wrenches = None
+        if external_link_wrenches is not None:
+            ser_external_link_wrenches = [
+                conversions.msg_to_string(w) for w in external_link_wrenches
+            ]
+
+        ser_traj_out, iterations_taken = self._g.retime_trajectory_with_itlp(
+            ser_ref_state_in,
+            ser_traj_in,
+            velocity_scaling_factor,
+            acceleration_scaling_factor,
+            joint_torque_limits,
+            try_torque_injection,
+            ser_gravity_vector,
+            ser_external_link_wrenches,
+            path_tolerance,
+            resample_dt,
+            min_angle_change,
+            accel_limit_decrement_factor,
+            max_iterations,
+        )
+
+        traj_out = RobotTrajectory()
+        traj_out.deserialize(ser_traj_out)
+        return traj_out, iterations_taken
 
     def inject_trajectory_torques(
         self,
