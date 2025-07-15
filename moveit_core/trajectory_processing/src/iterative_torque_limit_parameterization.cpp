@@ -256,6 +256,8 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     *iterations_taken = num_iterations;
   }
 
+  ROS_WARN_STREAM_NAMED(LOGNAME, "ITLP took " << num_iterations << " iterations (max: " << max_iter << ")");
+
   if (num_iterations >= max_iter && iteration_needed)
   {
     if (reset_trajectory_after_max_iter)

@@ -665,7 +665,6 @@ public:
                                                  const bp::object& accel_limit_decrement_factor_obj = bp::object(),
                                                  const bp::object& max_iterations_obj = bp::object())
   {
-    ROS_ERROR_STREAM_NAMED("move_group_py", "Retiming trajectory with algorithm: " << algorithm);
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
 
