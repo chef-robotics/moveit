@@ -256,7 +256,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     *iterations_taken = num_iterations;
   }
 
-  ROS_WARN_STREAM_NAMED(LOGNAME, "ITLP took " << num_iterations << " iterations (max: " << max_iter << ")");
+  // ROS_WARN_STREAM_NAMED(LOGNAME, "ITLP took " << num_iterations << " iterations (max: " << max_iter << ")");
 
   if (num_iterations >= max_iter && iteration_needed)
   {
