@@ -95,9 +95,9 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     return false;
   }
 
-  if (accel_decrement_factor < 0.01 || accel_decrement_factor > 0.2)
+  if (accel_decrement_factor < 0.01)
   {
-    ROS_ERROR_NAMED(LOGNAME, "The accel_limit_decrement_factor is outside the typical range [0.01, 0.2]");
+    ROS_ERROR_NAMED(LOGNAME, "The accel_limit_decrement_factor is too small, less than 0.01");
     return false;
   }
 
