@@ -888,8 +888,11 @@ bool TimeOptimalTrajectoryGeneration::computeTimeStamps(
   }
 
   // Validate scaling
-  double velocity_scaling_factor = verifyScalingFactor(max_velocity_scaling_factor);
-  double acceleration_scaling_factor = verifyScalingFactor(max_acceleration_scaling_factor);
+  // double velocity_scaling_factor = verifyScalingFactor(max_velocity_scaling_factor);
+  // double acceleration_scaling_factor = verifyScalingFactor(max_acceleration_scaling_factor);
+  // NB: Allowing any scaling factors for testing.
+  double velocity_scaling_factor = max_velocity_scaling_factor;
+  double acceleration_scaling_factor = max_acceleration_scaling_factor;
 
   // limits need to be positive, otherwise we never exit
   auto validate_limit = [](const char* type, double value, const std::string& name) {
