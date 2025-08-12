@@ -38,6 +38,7 @@
 
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 #include <boost/optional.hpp>
+#include <unordered_map>
 
 namespace trajectory_processing
 {
@@ -50,31 +51,56 @@ public:
                                        boost::optional<double> min_angle_change = boost::none);
 
   /**
-   * \brief Compute a trajectory with waypoints spaced equally in time (according to resample_dt_).
-   * Resampling the trajectory doesn't change the start and goal point,
-   * and all re-sampled waypoints will be on the path of the original trajectory (within path_tolerance_).
-   * However, controller execution is separate from MoveIt and may deviate from the intended path between waypoints.
-   * path_tolerance_ is defined in configuration space, so the unit is rad for revolute joints,
-   * meters for prismatic joints.
-   * \param[in,out] trajectory A path which needs time-parameterization. It's OK if this path has already been
-   * time-parameterized; this function will re-time-parameterize it.
-   * \param gravity_vector W.r.t. the robot's base frame. Units are m/s^2
-   * \param external_link_wrenches Externally-applied wrenches on each link. TODO(andyz): what frame is this in?
-   * \param joint_torque_limits Torque limits for each joint in N*m. All should be >0.
-   * \param max_velocity_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
-   * \param max_acceleration_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
-   * \param accel_limit_decrement_factor Must be in the range [0.01, 0.2]. If not specified, default is 0.1.
-   *   This affects how fast acceleration limits are decreased while searching for a solution.
-   *   Time-optimality of the output is accurate to approximately (100*accel_limit_decrement_factor)%.
-   *   For example, if accel_limit_decrement_factor is 0.1, the output should be within 10% of time-optimal.
-   * \param max_iterations Maximum number of times to do the TOTG->torque check->accel change loop.
-   *   If not specified, default is 10.
-   * \param reset_traj_after_max_iterations Whether to reset `trajectory` to its initial state when more than
-   *   `max_iterations` iterations is needed to get all torques under their limits. If not specified, default is false.
+   * \brief See computeTimeStampsWithTorqueLimits(trajectory, velocity_limits, acceleration_limits, ...) for docs.
    */
   bool computeTimeStampsWithTorqueLimits(
-      robot_trajectory::RobotTrajectory& trajectory, const geometry_msgs::Vector3& gravity_vector,
-      const std::vector<geometry_msgs::Wrench>& external_link_wrenches, const std::vector<double>& joint_torque_limits,
+      robot_trajectory::RobotTrajectory& trajectory, const std::vector<double>& torque_limits,
+      const geometry_msgs::Vector3& gravity_vector,
+      const std::vector<geometry_msgs::Wrench>& external_link_wrenches,
+      const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
+      boost::optional<double> accel_limit_decrement_factor = boost::none,
+      boost::optional<size_t> max_iterations = boost::none,
+      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none) const
+  {
+    // Delegate to the overload that accepts custom velocity and acceleration limits, using empty maps
+    // to indicate that RobotModel limits should be used.
+    std::unordered_map<std::string, double> empty_velocity_limits;
+    std::unordered_map<std::string, double> empty_acceleration_limits;
+    return computeTimeStampsWithTorqueLimits(trajectory, empty_velocity_limits, empty_acceleration_limits,
+                                             torque_limits, gravity_vector, external_link_wrenches,
+                                             max_velocity_scaling_factor, max_acceleration_scaling_factor,
+                                             accel_limit_decrement_factor, max_iterations,
+                                             reset_trajectory_after_max_iterations);
+  }
+
+  /**
+   * \brief Compute a trajectory with waypoints spaced equally in time (according to resample_dt_).
+   * \param[in,out] trajectory A path which needs time-parameterization. It's OK if this path has already been
+   * time-parameterized; this function will re-time-parameterize it.
+   * \param velocity_limits Joint names and velocity limits [rad/s, m/s].
+   * \param acceleration_limits Joint names and acceleration limits [rad/s^2, m/s^2].
+   * \param torque_limits Torque limits for each joint (all should be > 0) [N*m].
+   * \param gravity_vector Orientation of the gravity vector w.r.t. the RobotModel's base frame [m/s^2].
+   * \param external_link_wrenches Externally-applied wrenches on each link. TODO(andyz): what frame is this in?
+   * \param max_velocity_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
+   * \param max_acceleration_scaling_factor A factor in the range [0,1] which can slow down the trajectory.
+   * \param accel_limit_decrement_factor (Optional) How much to change the acceleration limits every iteration.
+   *   Time-optimality of the output is accurate to approximately (100*accel_limit_decrement_factor)%. For example, if
+   *   accel_limit_decrement_factor is 0.1, the output should be within 10% of time-optimal. Must be > 0.01. If not
+   *   specified, default is 0.1.
+   * \param max_iterations (Optional) Maximum number of times to do the TOTG->torque check->accel change loop. If not
+   *   specified, default is 10.
+   * \param reset_traj_after_max_iterations (Optional) Whether to reset `trajectory` to its initial state when more
+   *   than `max_iterations` iterations is needed to get all torques under their limits. If not specified, default is
+   *   false.
+   */
+  bool computeTimeStampsWithTorqueLimits(
+      robot_trajectory::RobotTrajectory& trajectory,
+      const std::unordered_map<std::string, double>& velocity_limits,
+      const std::unordered_map<std::string, double>& acceleration_limits,
+      const std::vector<double>& torque_limits,
+      const geometry_msgs::Vector3& gravity_vector,
+      const std::vector<geometry_msgs::Wrench>& external_link_wrenches,
       const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
       boost::optional<double> accel_limit_decrement_factor = boost::none,
       boost::optional<size_t> max_iterations = boost::none,

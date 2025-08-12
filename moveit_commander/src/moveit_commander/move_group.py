@@ -32,6 +32,7 @@
 #
 # Author: Ioan Sucan, William Baker
 
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -736,13 +737,15 @@ class MoveGroupCommander(object):
         velocity_scaling_factor=1.0,  # type: float
         acceleration_scaling_factor=1.0,  # type: float
         algorithm="iterative_time_parameterization",  # type: str
+        joint_velocity_limits=None,  # type: Optional[Dict[str, float]]
+        joint_acceleration_limits=None,  # type: Optional[Dict[str, float]]
+        joint_torque_limits=None,  # type: Optional[List[float]]
         try_torque_injection=True,  # type: bool
         gravity_vector=None,  # type: Optional[Vector3]
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
         path_tolerance=None,  # type: Optional[float]
         resample_dt=None,  # type: Optional[float]
         min_angle_change=None,  # type: Optional[float]
-        joint_torque_limits=None,  # type: Optional[List[float]]
         accel_limit_decrement_factor=None,  # type: Optional[float]
         max_iterations=None,  # type: Optional[int]
     ):
@@ -763,6 +766,15 @@ class MoveGroupCommander(object):
                 - "iterative_spline_parameterization" (ISP)
                 - "time_optimal_trajectory_generation" (TOTG)
                 - "iterative_torque_limit_parameterization" (ITLP)
+            joint_velocity_limits: Dictionary mapping joint names to velocity
+                limits (rad/s or m/s). Overrides RobotModel limits for any joint
+                provided. Default: None (use RobotModel limits for all joints).
+            joint_acceleration_limits: Dictionary mapping joint names to
+                acceleration limits (rad/s^2 or m/s^2). Overrides RobotModel
+                limits for any joint provided. Default: None (use RobotModel
+                limits for all joints).
+            joint_torque_limits: Joint torque limits (Nm) for ITLP; required for
+                ITLP!
             try_torque_injection: Whether to compute and store joint torques
                 in the returned trajectory. Default: True
             gravity_vector: Gravity w.r.t. robot model base frame;
@@ -779,8 +791,6 @@ class MoveGroupCommander(object):
             min_angle_change: Minimum angle change (rad) for TOTG/ITLP;
                 if not specified, a default value is used. See TOTG/ITLP docs
                 for details and default.
-            joint_torque_limits: Joint torque limits (Nm) for ITLP;
-                Required for ITLP!
             accel_limit_decrement_factor: Acceleration limit decrement factor
                 for ITLP; if not specified, a default value is used. See
                 ITLP docs for details and default.
@@ -810,13 +820,15 @@ class MoveGroupCommander(object):
             velocity_scaling_factor,
             acceleration_scaling_factor,
             algorithm,
+            joint_velocity_limits,
+            joint_acceleration_limits,
+            joint_torque_limits,
             try_torque_injection,
             ser_gravity_vector,
             ser_external_link_wrenches,
             path_tolerance,
             resample_dt,
             min_angle_change,
-            joint_torque_limits,
             accel_limit_decrement_factor,
             max_iterations,
         )

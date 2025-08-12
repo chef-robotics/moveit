@@ -34,6 +34,9 @@
 
 /* Author: Ioan Sucan */
 
+// Default Boost Python max arity is 15, but `retimeTrajectory` has 16 arguments, so we increase it.
+#define BOOST_PYTHON_MAX_ARITY 16
+
 #include <moveit/dynamics_solver/dynamics_solver.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/py_bindings_tools/roscpp_initializer.h>
@@ -56,6 +59,7 @@
 #include <eigenpy/eigenpy.hpp>
 #include <memory>
 #include <Python.h>
+#include <unordered_map>
 
 /** @cond IGNORE */
 
@@ -631,6 +635,11 @@ public:
    *   - iterative_spline_parameterization (ISP)
    *   - time_optimal_trajectory_generation (TOTG)
    *   - iterative_torque_limit_parameterization (ITLP)
+   * \param joint_velocity_limits_obj Optional dict of joint names to velocity limits (rad/s or m/s);
+   *   overrides RobotModel limits for any joint provided. Default: None (use RobotModel limits for all joints).
+   * \param joint_acceleration_limits_obj Optional dict of joint names to acceleration limits (rad/s^2 or m/s^2);
+   *   overrides RobotModel limits for any joint provided. Default: None (use RobotModel limits for all joints).
+   * \param joint_torque_limits_obj Optional list of doubles for ITLP joint torque limits (Nm); required for ITLP.
    * \param try_torque_injection Whether to compute and store joint torques in retimed trajectory (default: true)
    * \param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. robot model base frame
    *   (default: zero gravity)
@@ -643,7 +652,6 @@ public:
    *   see TOTG/ITLP docs for details and default.
    * \param min_angle_change_obj Optional double for TOTG/ITLP minimum angle change (rad);
    *   see TOTG/ITLP docs for details and default.
-   * \param joint_torque_limits_obj Optional list of doubles for ITLP joint torque limits (Nm); required for ITLP.
    * \param accel_limit_decrement_factor_obj Optional double for ITLP acceleration limit decrement factor;
    *   see ITLP docs for details and default.
    * \param max_iterations_obj Optional int for ITLP maximum number of iterations;
@@ -653,15 +661,18 @@ public:
    */
   py_bindings_tools::ByteString retimeTrajectory(const py_bindings_tools::ByteString& ref_state_str,
                                                  const py_bindings_tools::ByteString& traj_str,
-                                                 double velocity_scaling_factor, double acceleration_scaling_factor,
+                                                 double velocity_scaling_factor,
+                                                 double acceleration_scaling_factor,
                                                  const std::string& algorithm,
+                                                 const bp::object& joint_velocity_limits_obj = bp::object(),
+                                                 const bp::object& joint_acceleration_limits_obj = bp::object(),
+                                                 const bp::object& joint_torque_limits_obj = bp::object(),
                                                  bool try_torque_injection = true,
                                                  const bp::object& gravity_vector_obj = bp::object(),
                                                  const bp::object& external_link_wrenches_obj = bp::object(),
                                                  const bp::object& path_tolerance_obj = bp::object(),
                                                  const bp::object& resample_dt_obj = bp::object(),
                                                  const bp::object& min_angle_change_obj = bp::object(),
-                                                 const bp::object& joint_torque_limits_obj = bp::object(),
                                                  const bp::object& accel_limit_decrement_factor_obj = bp::object(),
                                                  const bp::object& max_iterations_obj = bp::object())
   {
@@ -700,6 +711,18 @@ public:
       external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
     }
 
+    // Convert joint velocity, acceleration, and torque limits from Python to C++ objects.
+    std::unordered_map<std::string, double> joint_velocity_limits;
+    if (!joint_velocity_limits_obj.is_none())
+    {
+      joint_velocity_limits = py_bindings_tools::unorderedMapFromDict<std::string, double>(joint_velocity_limits_obj);
+    }
+    std::unordered_map<std::string, double> joint_acceleration_limits;
+    if (!joint_acceleration_limits_obj.is_none())
+    {
+      joint_acceleration_limits =
+          py_bindings_tools::unorderedMapFromDict<std::string, double>(joint_acceleration_limits_obj);
+    }
     std::vector<double> joint_torque_limits;
     if (!joint_torque_limits_obj.is_none())
     {
@@ -739,16 +762,17 @@ public:
       {
         trajectory_processing::IterativeTorqueLimitParameterization time_param(path_tolerance, resample_dt,
                                                                                min_angle_change);
-        time_param.computeTimeStampsWithTorqueLimits(traj_obj, gravity_vector, external_link_wrenches,
-                                                     joint_torque_limits, velocity_scaling_factor,
-                                                     acceleration_scaling_factor, accel_limit_decrement_factor,
-                                                     max_iterations);
+        time_param.computeTimeStampsWithTorqueLimits(traj_obj, joint_velocity_limits, joint_acceleration_limits,
+                                                     joint_torque_limits, gravity_vector, external_link_wrenches,
+                                                     velocity_scaling_factor, acceleration_scaling_factor,
+                                                     accel_limit_decrement_factor, max_iterations);
       }
       else if (algorithm == "time_optimal_trajectory_generation")
       {
         trajectory_processing::TimeOptimalTrajectoryGeneration time_param(path_tolerance, resample_dt,
                                                                           min_angle_change);
-        time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+        time_param.computeTimeStamps(traj_obj, joint_velocity_limits, joint_acceleration_limits,
+                                     velocity_scaling_factor, acceleration_scaling_factor);
       }
       else
       {

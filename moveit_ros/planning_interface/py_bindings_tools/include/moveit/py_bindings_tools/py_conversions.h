@@ -42,6 +42,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
 
 namespace moveit
 {
@@ -93,6 +94,23 @@ boost::python::list listFromString(const std::vector<std::string>& v)
 {
   return listFromType<std::string>(v);
 }
+
+template <typename K, typename V>
+std::unordered_map<K, V> unorderedMapFromDict(const boost::python::object& obj)
+{
+  boost::python::dict d = boost::python::extract<boost::python::dict>(obj);
+  std::unordered_map<K, V> result;
+  boost::python::list keys = d.keys();
+  int num_keys = boost::python::len(keys);
+  for (int i = 0; i < num_keys; ++i)
+  {
+    K key = boost::python::extract<K>(keys[i]);
+    V value = boost::python::extract<V>(d[keys[i]]);
+    result[key] = value;
+  }
+  return result;
+}
+
 }  // namespace py_bindings_tools
 }  // namespace moveit
 
