@@ -114,7 +114,7 @@ TEST(time_optimal_trajectory_generation, test_totg_with_torque_limits)
   }();
 
   bool totg_success =
-      totg.computeTimeStampsWithTorqueLimits(trajectory, gravity_vector, external_link_wrenches, joint_torque_limits,
+      totg.computeTimeStampsWithTorqueLimits(trajectory, joint_torque_limits, gravity_vector, external_link_wrenches,
                                              1.0 /* vel scaling */, 1.0 /* accel scaling */,
                                              accel_limit_decrement_factor);
   ASSERT_TRUE(totg_success) << "Failed to compute timestamps";
@@ -123,7 +123,7 @@ TEST(time_optimal_trajectory_generation, test_totg_with_torque_limits)
   // Now decrease joint torque limits and re-time-parameterize. The trajectory duration should be longer.
   const std::vector<double> lower_torque_limits{ 1 };  // in N*m
   totg_success =
-      totg.computeTimeStampsWithTorqueLimits(trajectory, gravity_vector, external_link_wrenches, lower_torque_limits,
+      totg.computeTimeStampsWithTorqueLimits(trajectory, lower_torque_limits, gravity_vector, external_link_wrenches,
                                              1.0 /* vel scaling */, 1.0 /* accel scaling */,
                                              accel_limit_decrement_factor);
   ASSERT_TRUE(totg_success) << "Failed to compute timestamps";
