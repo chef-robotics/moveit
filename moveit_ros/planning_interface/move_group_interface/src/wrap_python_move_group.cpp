@@ -581,15 +581,8 @@ public:
       py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj), gravity_vector);
     }
 
-    std::vector<geometry_msgs::Wrench> external_link_wrenches;
-    if (!external_link_wrenches_obj.is_none())
-    {
-      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
-    }
-    if (external_link_wrenches.empty())
-    {
-      external_link_wrenches.resize(getKdlChainLinkNamesFromGroup(robot_model->getJointModelGroup(group_name)).size());
-    }
+    const std::vector<geometry_msgs::Wrench> external_link_wrenches =
+        resolveExternalLinkWrenches(external_link_wrenches_obj, robot_model->getJointModelGroup(group_name));
 
     // Release GIL and do the actual torque computation.
     {
@@ -686,15 +679,8 @@ public:
       py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj), gravity_vector);
     }
 
-    std::vector<geometry_msgs::Wrench> external_link_wrenches;
-    if (!external_link_wrenches_obj.is_none())
-    {
-      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
-    }
-    if (external_link_wrenches.empty())
-    {
-      external_link_wrenches.resize(getKdlChainLinkNamesFromGroup(robot_model->getJointModelGroup(group_name)).size());
-    }
+    const std::vector<geometry_msgs::Wrench> external_link_wrenches =
+        resolveExternalLinkWrenches(external_link_wrenches_obj, robot_model->getJointModelGroup(group_name));
 
     // Convert joint velocity, acceleration, and torque limits from Python to C++ objects.
     std::unordered_map<std::string, double> joint_velocity_limits;
@@ -901,6 +887,33 @@ private:
       link_names.push_back(link_name);
     }
     return link_names;
+  }
+
+  /**
+   * \brief Resolve external link wrenches from a Python list of serialized Wrench messages.
+   *
+   * If no list is provided, then a vector of zero wrenches is returned, with size matching the number of links in the
+   * KDL chain of the joint modelgroup.
+   *
+   * \param external_link_wrenches_obj Optional Python object containing list of serialized Wrench messages.
+   * \param group Joint model group to determine links from if no wrenches are provided.
+   *
+   * \return Vector of Wrenches.
+   */
+  std::vector<geometry_msgs::Wrench> resolveExternalLinkWrenches(
+      const bp::object& external_link_wrenches_obj,
+      const robot_model::JointModelGroup* group)
+  {
+    std::vector<geometry_msgs::Wrench> external_link_wrenches;
+    if (!external_link_wrenches_obj.is_none())
+    {
+      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
+    }
+    if (external_link_wrenches.empty())
+    {
+      external_link_wrenches.resize(getKdlChainLinkNamesFromGroup(group).size());
+    }
+    return external_link_wrenches;
   }
 };
 
