@@ -564,6 +564,43 @@ public:
   }
 
   /**
+   * \brief Determine the link names from a joint model group that match the link names in a KDL chain of the group.
+   *
+   * KDL chains have a "segment" for each (joint, child-link) pair starting from the root joint.
+   * There is no segment for the (root-joint, parent-link) pair, so the parent link is excluded
+   * from the returned list.
+   *
+   * \param group Joint model group to pull link names from.
+   *
+   * \return Vector of link names, excluding the root joint's parent link name.
+   */
+  std::vector<std::string> getKdlChainLinkNamesFromGroup(const robot_model::JointModelGroup* group)
+  {
+    if (!group)
+    {
+      return std::vector<std::string>();
+    }
+
+    // Determine the root joint's parent link name.
+    const auto root_joint = group->getCommonRoot();
+    const auto root_joint_parent_link = root_joint ? root_joint->getParentLinkModel() : nullptr;
+    const std::string root_joint_parent_link_name =
+        root_joint_parent_link ? root_joint_parent_link->getName() : std::string();
+
+    std::vector<std::string> link_names;
+    for (const auto& link_name : group->getLinkModelNames())
+    {
+      // Skip the root joint's parent link (if it exists) since it is not part of the KDL chain.
+      if (root_joint_parent_link && link_name == root_joint_parent_link_name)
+      {
+        continue;
+      }
+      link_names.push_back(link_name);
+    }
+    return link_names;
+  }
+
+  /**
    * \brief Compute joint torques for each point in a RobotTrajectory message,
    *   and store in the point's `effort` field.
    *
@@ -707,8 +744,7 @@ public:
     }
     if (external_link_wrenches.empty())
     {
-      const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(group_name);
-      external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
+      external_link_wrenches.resize(getKdlChainLinkNamesFromGroup(ref_state_obj.getJointModelGroup(group_name)).size());
     }
 
     // Convert joint velocity, acceleration, and torque limits from Python to C++ objects.
