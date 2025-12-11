@@ -550,19 +550,6 @@ public:
     return py_bindings_tools::serializeMsg(constraints_msg);
   }
 
-  // Convert a Python list of deserialized wrench messages to std::vector<geometry_msgs::Wrench>
-  void convertListToArrayOfWrenches(const bp::list& wrenches, std::vector<geometry_msgs::Wrench>& result)
-  {
-    int len = bp::len(wrenches);
-    result.reserve(len);
-    for (int i = 0; i < len; ++i) {
-      const py_bindings_tools::ByteString& wrench_str = bp::extract<py_bindings_tools::ByteString>(wrenches[i]);
-      geometry_msgs::Wrench wrench_msg;
-      py_bindings_tools::deserializeMsg(wrench_str, wrench_msg);
-      result.push_back(wrench_msg);
-    }
-  }
-
   /**
    * \brief Compute joint torques for each point in a RobotTrajectory message,
    *   and store in the point's `effort` field.
@@ -594,16 +581,8 @@ public:
       py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj), gravity_vector);
     }
 
-    std::vector<geometry_msgs::Wrench> external_link_wrenches;
-    if (!external_link_wrenches_obj.is_none())
-    {
-      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
-    }
-    if (external_link_wrenches.empty())
-    {
-      const robot_model::JointModelGroup* group = robot_model->getJointModelGroup(group_name);
-      external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
-    }
+    const std::vector<geometry_msgs::Wrench> external_link_wrenches =
+        resolveExternalLinkWrenches(external_link_wrenches_obj, robot_model->getJointModelGroup(group_name));
 
     // Release GIL and do the actual torque computation.
     {
@@ -700,16 +679,8 @@ public:
       py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj), gravity_vector);
     }
 
-    std::vector<geometry_msgs::Wrench> external_link_wrenches;
-    if (!external_link_wrenches_obj.is_none())
-    {
-      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
-    }
-    if (external_link_wrenches.empty())
-    {
-      const robot_model::JointModelGroup* group = ref_state_obj.getJointModelGroup(group_name);
-      external_link_wrenches.resize(group ? group->getLinkModelNames().size() : 0);
-    }
+    const std::vector<geometry_msgs::Wrench> external_link_wrenches =
+        resolveExternalLinkWrenches(external_link_wrenches_obj, robot_model->getJointModelGroup(group_name));
 
     // Convert joint velocity, acceleration, and torque limits from Python to C++ objects.
     std::unordered_map<std::string, double> joint_velocity_limits;
@@ -866,6 +837,83 @@ private:
         point.effort = joint_torques;
       }
     }
+  }
+
+  // Convert a Python list of deserialized wrench messages to std::vector<geometry_msgs::Wrench>
+  void convertListToArrayOfWrenches(const bp::list& wrenches, std::vector<geometry_msgs::Wrench>& result)
+  {
+    int len = bp::len(wrenches);
+    result.reserve(len);
+    for (int i = 0; i < len; ++i) {
+      const py_bindings_tools::ByteString& wrench_str = bp::extract<py_bindings_tools::ByteString>(wrenches[i]);
+      geometry_msgs::Wrench wrench_msg;
+      py_bindings_tools::deserializeMsg(wrench_str, wrench_msg);
+      result.push_back(wrench_msg);
+    }
+  }
+
+  /**
+   * \brief Determine the link names from a joint model group that match the link names in a KDL chain of the group.
+   *
+   * KDL chains have a "segment" for each (joint, child-link) pair starting from the root joint.
+   * There is no segment for the (root-joint, parent-link) pair, so the parent link is excluded
+   * from the returned list.
+   *
+   * \param group Joint model group to pull link names from.
+   *
+   * \return Vector of link names, excluding the root joint's parent link name.
+   */
+  std::vector<std::string> getKdlChainLinkNamesFromGroup(const robot_model::JointModelGroup* group)
+  {
+    if (!group)
+    {
+      return std::vector<std::string>();
+    }
+
+    // Determine the root joint's parent link name.
+    const auto root_joint = group->getCommonRoot();
+    const auto root_joint_parent_link = root_joint ? root_joint->getParentLinkModel() : nullptr;
+    const std::string root_joint_parent_link_name =
+        root_joint_parent_link ? root_joint_parent_link->getName() : std::string();
+
+    std::vector<std::string> link_names;
+    for (const auto& link_name : group->getLinkModelNames())
+    {
+      // Skip the root joint's parent link (if it exists) since it is not part of the KDL chain.
+      if (root_joint_parent_link && link_name == root_joint_parent_link_name)
+      {
+        continue;
+      }
+      link_names.push_back(link_name);
+    }
+    return link_names;
+  }
+
+  /**
+   * \brief Resolve external link wrenches from a Python list of serialized Wrench messages.
+   *
+   * If no list is provided, then a vector of zero wrenches is returned, with size matching the number of links in the
+   * KDL chain of the joint modelgroup.
+   *
+   * \param external_link_wrenches_obj Optional Python object containing list of serialized Wrench messages.
+   * \param group Joint model group to determine links from if no wrenches are provided.
+   *
+   * \return Vector of Wrenches.
+   */
+  std::vector<geometry_msgs::Wrench> resolveExternalLinkWrenches(
+      const bp::object& external_link_wrenches_obj,
+      const robot_model::JointModelGroup* group)
+  {
+    std::vector<geometry_msgs::Wrench> external_link_wrenches;
+    if (!external_link_wrenches_obj.is_none())
+    {
+      convertListToArrayOfWrenches(bp::extract<bp::list>(external_link_wrenches_obj), external_link_wrenches);
+    }
+    if (external_link_wrenches.empty())
+    {
+      external_link_wrenches.resize(getKdlChainLinkNamesFromGroup(group).size());
+    }
+    return external_link_wrenches;
   }
 };
 
