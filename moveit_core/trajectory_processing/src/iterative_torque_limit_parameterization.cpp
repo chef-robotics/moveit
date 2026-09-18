@@ -195,8 +195,14 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     // TOTG is always run on the same trajectory;
     // `mutable_acceleration_limits` is the only thing changing across iterations.
     trajectory.setRobotTrajectoryMsg(initial_state, original_traj);
-    totg_.computeTimeStamps(trajectory, mutable_velocity_limits, mutable_acceleration_limits,
-                            max_velocity_scaling_factor, max_acceleration_scaling_factor);
+    // A failure here leaves `trajectory` holding `original_traj`, which
+    // is unparameterized, so it cannot be evaluated or returned.
+    if (!totg_.computeTimeStamps(trajectory, mutable_velocity_limits, mutable_acceleration_limits,
+                                 max_velocity_scaling_factor, max_acceleration_scaling_factor))
+    {
+      ROS_ERROR_STREAM_NAMED(LOGNAME, "TOTG failed on iteration " << num_iterations);
+      return false;
+    }
 
     std::vector<double> joint_positions(dof);
     std::vector<double> joint_velocities(dof);
