@@ -800,7 +800,9 @@ class MoveGroupCommander(object):
                 and default.
 
         Returns:
-            Trajectory with time parameterization applied.
+            Trajectory with time parameterization applied, if parameterization
+            succeeds else `None`.
+
         """
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
