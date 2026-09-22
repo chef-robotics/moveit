@@ -714,9 +714,9 @@ public:
 
     // Release GIL and do the actual retiming.
     // N.B. Nothing inside the block may touch a Python object, so the
-    // outcome is carried out on `retime_ok` and serialized after the
+    // outcome is carried out on `retiming_was_successful` and serialized after the
     // block closes rather than returned from within it.
-    bool retime_ok = true;
+    bool retiming_was_successful = true;
     {
       GILReleaser gr;
 
@@ -726,18 +726,20 @@ public:
       if (algorithm == "iterative_time_parameterization")
       {
         trajectory_processing::IterativeParabolicTimeParameterization time_param;
-        retime_ok = time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+        retiming_was_successful = time_param.computeTimeStamps(traj_obj, velocity_scaling_factor,
+                                                               acceleration_scaling_factor);
       }
       else if (algorithm == "iterative_spline_parameterization")
       {
         trajectory_processing::IterativeSplineParameterization time_param;
-        retime_ok = time_param.computeTimeStamps(traj_obj, velocity_scaling_factor, acceleration_scaling_factor);
+        retiming_was_successful = time_param.computeTimeStamps(traj_obj, velocity_scaling_factor,
+                                                               acceleration_scaling_factor);
       }
       else if (algorithm == "iterative_torque_limit_parameterization")
       {
         trajectory_processing::IterativeTorqueLimitParameterization time_param(path_tolerance, resample_dt,
                                                                                min_angle_change);
-        retime_ok = time_param.computeTimeStampsWithTorqueLimits(
+        retiming_was_successful = time_param.computeTimeStampsWithTorqueLimits(
             traj_obj, joint_velocity_limits, joint_acceleration_limits, joint_torque_limits, gravity_vector,
             external_link_wrenches, velocity_scaling_factor, acceleration_scaling_factor,
             accel_limit_decrement_factor, max_iterations);
@@ -746,16 +748,17 @@ public:
       {
         trajectory_processing::TimeOptimalTrajectoryGeneration time_param(path_tolerance, resample_dt,
                                                                           min_angle_change);
-        retime_ok = time_param.computeTimeStamps(traj_obj, joint_velocity_limits, joint_acceleration_limits,
-                                                 velocity_scaling_factor, acceleration_scaling_factor);
+        retiming_was_successful = time_param.computeTimeStamps(traj_obj, joint_velocity_limits,
+                                                               joint_acceleration_limits, velocity_scaling_factor,
+                                                               acceleration_scaling_factor);
       }
       else
       {
         ROS_ERROR_STREAM_NAMED("move_group_py", "Unknown time parameterization algorithm!!: " << algorithm);
-        retime_ok = false;
+        retiming_was_successful = false;
       }
 
-      if (retime_ok)
+      if (retiming_was_successful)
       {
         traj_obj.getRobotTrajectoryMsg(traj_msg);
 
@@ -774,15 +777,13 @@ public:
       }
       else
       {
-        ROS_ERROR_STREAM_NAMED("move_group_py", "Retiming failed, algorithm '"
-                                                    << algorithm << "', "
-                                                    << traj_msg.joint_trajectory.points.size() << " points");
+        ROS_WARN_STREAM_ONCE_NAMED("move_group_py", "Retiming failed, algorithm: " << algorithm);
       }
     }  // End of GILReleaser.
 
     // An empty result is the failure signal: the caller's deserialize
     // raises on it rather than accepting an unparameterized trajectory.
-    if (!retime_ok)
+    if (!retiming_was_successful)
       return py_bindings_tools::ByteString("");
 
     return py_bindings_tools::serializeMsg(traj_msg);
