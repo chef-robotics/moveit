@@ -50,6 +50,7 @@ from moveit_msgs.msg import (
     PlannerInterfaceDescription,
 )
 from sensor_msgs.msg import JointState
+import genpy
 import rospy
 import tf
 from moveit_ros_planning_interface import _moveit_move_group_interface
@@ -749,7 +750,7 @@ class MoveGroupCommander(object):
         accel_limit_decrement_factor=None,  # type: Optional[float]
         max_iterations=None,  # type: Optional[int]
     ):
-        # type: (...) -> RobotTrajectory
+        # type: (...) -> RobotTrajectory | None
         """
         Retime a RobotTrajectory message using one of several time parameterization
         algorithms.
@@ -799,7 +800,9 @@ class MoveGroupCommander(object):
                 and default.
 
         Returns:
-            Trajectory with time parameterization applied.
+            Trajectory with time parameterization applied, if parameterization
+            succeeds else `None`.
+
         """
         ser_ref_state_in = conversions.msg_to_string(ref_state_in)
         ser_traj_in = conversions.msg_to_string(traj_in)
@@ -833,7 +836,13 @@ class MoveGroupCommander(object):
             max_iterations,
         )
         traj_out = RobotTrajectory()
-        traj_out.deserialize(ser_traj_out)
+        try:
+            traj_out.deserialize(ser_traj_out)
+        except genpy.DeserializationError:
+            # `retime_trajectory` returns an empty ByteString
+            # when retiming fails.
+            return None
+
         return traj_out
 
     def inject_trajectory_torques(
