@@ -35,9 +35,10 @@
 /* Author: Ioan Sucan */
 
 // Default Boost Python max arity is 15, but `retimeTrajectory` has 16 arguments, so we increase it.
-#define BOOST_PYTHON_MAX_ARITY 16
+#define BOOST_PYTHON_MAX_ARITY 17
 
 #include <moveit/dynamics_solver/dynamics_solver.h>
+#include <geometry_msgs/Inertia.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/py_bindings_tools/roscpp_initializer.h>
 #include <moveit/py_bindings_tools/py_conversions.h>
@@ -560,12 +561,15 @@ public:
    * \param external_link_wrenches_obj Optional list of serialized Wrench messages for external forces on links
    *   (default: zero external wrenches for all links)
    *   If specified, the number of wrenches must match the number of links in the robot model.
+   * \param tip_inertia_obj Optional serialized Inertia message for a body fixed to the group's last link,
+   *   in that link's frame (default: none)
    *
    * \return Serialized RobotTrajectory message with torques injected into the `effort` field.
    */
   py_bindings_tools::ByteString injectTrajectoryTorques(const py_bindings_tools::ByteString& traj_str,
                                                         const bp::object& gravity_vector_obj = bp::object(),
-                                                        const bp::object& external_link_wrenches_obj = bp::object())
+                                                        const bp::object& external_link_wrenches_obj = bp::object(),
+                                                        const bp::object& tip_inertia_obj = bp::object())
   {
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
@@ -583,6 +587,7 @@ public:
 
     const std::vector<geometry_msgs::Wrench> external_link_wrenches =
         resolveExternalLinkWrenches(external_link_wrenches_obj, robot_model->getJointModelGroup(group_name));
+    const geometry_msgs::Inertia tip_inertia = inertiaFromPython(tip_inertia_obj);
 
     // Release GIL and do the actual torque computation.
     {
@@ -590,7 +595,8 @@ public:
 
       try
       {
-        injectTorquesIntoRobotTrajectoryMsg(traj_msg, robot_model, group_name, gravity_vector, external_link_wrenches);
+        injectTorquesIntoRobotTrajectoryMsg(traj_msg, robot_model, group_name, gravity_vector, external_link_wrenches,
+                                            tip_inertia);
       }
       catch (const std::exception& e)
       {
@@ -653,7 +659,8 @@ public:
                                                  const bp::object& resample_dt_obj = bp::object(),
                                                  const bp::object& min_angle_change_obj = bp::object(),
                                                  const bp::object& accel_limit_decrement_factor_obj = bp::object(),
-                                                 const bp::object& max_iterations_obj = bp::object())
+                                                 const bp::object& max_iterations_obj = bp::object(),
+                                                 const bp::object& tip_inertia_obj = bp::object())
   {
     const auto group_name = getName();
     const auto robot_model = getRobotModel();
@@ -681,6 +688,7 @@ public:
 
     const std::vector<geometry_msgs::Wrench> external_link_wrenches =
         resolveExternalLinkWrenches(external_link_wrenches_obj, robot_model->getJointModelGroup(group_name));
+    const geometry_msgs::Inertia tip_inertia = inertiaFromPython(tip_inertia_obj);
 
     // Convert joint velocity, acceleration, and torque limits from Python to C++ objects.
     std::unordered_map<std::string, double> joint_velocity_limits;
@@ -742,7 +750,7 @@ public:
         retiming_was_successful = time_param.computeTimeStampsWithTorqueLimits(
             traj_obj, joint_velocity_limits, joint_acceleration_limits, joint_torque_limits, gravity_vector,
             external_link_wrenches, velocity_scaling_factor, acceleration_scaling_factor,
-            accel_limit_decrement_factor, max_iterations);
+            accel_limit_decrement_factor, max_iterations, boost::none, tip_inertia);
       }
       else if (algorithm == "time_optimal_trajectory_generation")
       {
@@ -767,7 +775,7 @@ public:
           try
           {
             injectTorquesIntoRobotTrajectoryMsg(traj_msg, robot_model, group_name, gravity_vector,
-                                                external_link_wrenches);
+                                                external_link_wrenches, tip_inertia);
           }
           catch (const std::exception& e)
           {
@@ -787,6 +795,54 @@ public:
       return py_bindings_tools::ByteString("");
 
     return py_bindings_tools::serializeMsg(traj_msg);
+  }
+
+  /**
+   * \brief Describe the chain the dynamics solver computes torques with.
+   *
+   * \param gravity_vector_obj Optional serialized Vector3 message for gravity w.r.t. robot model base frame
+   * \param tip_inertia_obj Optional serialized Inertia message for a body fixed to the group's last link
+   *
+   * \return A dict with `tip_link` and `segments`, one dict per chain segment, base to tip:
+   *   `link`, `mass` [kg], `com` [x, y, z] in the link frame [m], and `inertia` about the center of mass
+   *   [ixx, iyy, izz, ixy, ixz, iyz] in the link frame [kg m^2]. Empty `segments` if the solver cannot initialize.
+   */
+  bp::dict describeDynamicsPython(const bp::object& gravity_vector_obj = bp::object(),
+                                  const bp::object& tip_inertia_obj = bp::object())
+  {
+    geometry_msgs::Vector3 gravity_vector;
+    if (!gravity_vector_obj.is_none())
+    {
+      py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(gravity_vector_obj), gravity_vector);
+    }
+    const geometry_msgs::Inertia tip_inertia = inertiaFromPython(tip_inertia_obj);
+    const dynamics_solver::DynamicsSolver solver(getRobotModel(), getName(), gravity_vector, tip_inertia);
+
+    bp::dict description;
+    description["tip_link"] = solver.getTipLinkName();
+    bp::list segments;
+    for (const auto& segment : solver.getSegmentInertias())
+    {
+      bp::dict entry;
+      entry["link"] = segment.link_name;
+      entry["mass"] = segment.inertia.m;
+      bp::list com;
+      com.append(segment.inertia.com.x);
+      com.append(segment.inertia.com.y);
+      com.append(segment.inertia.com.z);
+      entry["com"] = com;
+      bp::list inertia;
+      inertia.append(segment.inertia.ixx);
+      inertia.append(segment.inertia.iyy);
+      inertia.append(segment.inertia.izz);
+      inertia.append(segment.inertia.ixy);
+      inertia.append(segment.inertia.ixz);
+      inertia.append(segment.inertia.iyz);
+      entry["inertia"] = inertia;
+      segments.append(entry);
+    }
+    description["segments"] = segments;
+    return description;
   }
 
   Eigen::MatrixXd getJacobianMatrixPython(const bp::list& joint_values, const bp::object& reference_point = bp::object())
@@ -835,6 +891,7 @@ private:
    * \param group_name Name of the joint group to compute torques for.
    * \param gravity_vector The gravity vector to use in dynamics calculations.
    * \param external_link_wrenches External wrenches (force/torque) acting on each link.
+   * \param tip_inertia A body fixed to the group's last link, in that link's frame; zero mass attaches nothing.
    *
    * \note No input validation is performed -- recommend calling in a try/catch.
    * \note Assumes the joint order in trajectory_msg.joint_trajectory matches the
@@ -843,9 +900,14 @@ private:
   void injectTorquesIntoRobotTrajectoryMsg(moveit_msgs::RobotTrajectory& trajectory_msg,
                                            const robot_model::RobotModelConstPtr& robot_model,
                                            const std::string& group_name, const geometry_msgs::Vector3& gravity_vector,
-                                           const std::vector<geometry_msgs::Wrench>& external_link_wrenches)
+                                           const std::vector<geometry_msgs::Wrench>& external_link_wrenches,
+                                           const geometry_msgs::Inertia& tip_inertia)
   {
-    dynamics_solver::DynamicsSolver dynamics_solver(robot_model, group_name, gravity_vector);
+    dynamics_solver::DynamicsSolver dynamics_solver(robot_model, group_name, gravity_vector, tip_inertia);
+    if (!dynamics_solver.getGroup())
+    {
+      throw std::runtime_error("dynamics solver failed to initialize for group '" + group_name + "'");
+    }
 
     std::vector<double> joint_torques(trajectory_msg.joint_trajectory.joint_names.size());
     for (auto& point : trajectory_msg.joint_trajectory.points)
@@ -856,6 +918,17 @@ private:
         point.effort = joint_torques;
       }
     }
+  }
+
+  // A serialized Inertia message, or a zero-mass Inertia for None.
+  geometry_msgs::Inertia inertiaFromPython(const bp::object& inertia_obj)
+  {
+    geometry_msgs::Inertia inertia;
+    if (!inertia_obj.is_none())
+    {
+      py_bindings_tools::deserializeMsg(bp::extract<py_bindings_tools::ByteString>(inertia_obj), inertia);
+    }
+    return inertia;
   }
 
   // Convert a Python list of deserialized wrench messages to std::vector<geometry_msgs::Wrench>
@@ -1073,6 +1146,7 @@ static void wrap_move_group_interface()
   move_group_interface_class.def("detach_object", &MoveGroupInterfaceWrapper::detachObject);
   move_group_interface_class.def("inject_trajectory_torques", &MoveGroupInterfaceWrapper::injectTrajectoryTorques);
   move_group_interface_class.def("retime_trajectory", &MoveGroupInterfaceWrapper::retimeTrajectory);
+  move_group_interface_class.def("describe_dynamics", &MoveGroupInterfaceWrapper::describeDynamicsPython);
   move_group_interface_class.def("get_named_targets", &MoveGroupInterfaceWrapper::getNamedTargetsPython);
   move_group_interface_class.def("get_named_target_values", &MoveGroupInterfaceWrapper::getNamedTargetValuesPython);
   move_group_interface_class.def("get_current_state_bounded", &MoveGroupInterfaceWrapper::getCurrentStateBoundedPython);

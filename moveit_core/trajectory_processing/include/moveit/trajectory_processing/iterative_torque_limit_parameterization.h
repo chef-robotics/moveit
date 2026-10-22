@@ -38,6 +38,7 @@
 
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 #include <boost/optional.hpp>
+#include <geometry_msgs/Inertia.h>
 #include <unordered_map>
 
 namespace trajectory_processing
@@ -60,7 +61,8 @@ public:
       const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
       boost::optional<double> accel_limit_decrement_factor = boost::none,
       boost::optional<size_t> max_iterations = boost::none,
-      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none) const
+      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none,
+      boost::optional<geometry_msgs::Inertia> tip_inertia = boost::none) const
   {
     // Delegate to the overload that accepts custom velocity and acceleration limits, using empty maps
     // to indicate that RobotModel limits should be used.
@@ -70,7 +72,7 @@ public:
                                              torque_limits, gravity_vector, external_link_wrenches,
                                              max_velocity_scaling_factor, max_acceleration_scaling_factor,
                                              accel_limit_decrement_factor, max_iterations,
-                                             reset_trajectory_after_max_iterations);
+                                             reset_trajectory_after_max_iterations, tip_inertia);
   }
 
   /**
@@ -93,6 +95,8 @@ public:
    * \param reset_traj_after_max_iterations (Optional) Whether to reset `trajectory` to its initial state when more
    *   than `max_iterations` iterations is needed to get all torques under their limits. If not specified, default is
    *   false.
+   * \param tip_inertia (Optional) A rigid body fixed to the group's last link, in that link's frame, that the
+   *   torque computation includes on top of the robot model: a tool or payload the URDF does not carry.
    */
   bool computeTimeStampsWithTorqueLimits(
       robot_trajectory::RobotTrajectory& trajectory,
@@ -104,7 +108,8 @@ public:
       const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
       boost::optional<double> accel_limit_decrement_factor = boost::none,
       boost::optional<size_t> max_iterations = boost::none,
-      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none) const;
+      boost::optional<bool> reset_trajectory_after_max_iterations = boost::none,
+      boost::optional<geometry_msgs::Inertia> tip_inertia = boost::none) const;
 
 private:
   TimeOptimalTrajectoryGeneration totg_;

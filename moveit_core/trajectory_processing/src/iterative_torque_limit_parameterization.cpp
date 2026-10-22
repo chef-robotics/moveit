@@ -62,7 +62,7 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     const std::vector<geometry_msgs::Wrench>& external_link_wrenches,
     const double max_velocity_scaling_factor, const double max_acceleration_scaling_factor,
     boost::optional<double> accel_limit_decrement_factor, boost::optional<size_t> max_iterations,
-    boost::optional<bool> reset_trajectory_after_max_iterations) const
+    boost::optional<bool> reset_trajectory_after_max_iterations, boost::optional<geometry_msgs::Inertia> tip_inertia) const
 {
   // 1. Call computeTimeStamps() to time-parameterize the trajectory with given vel/accel limits.
   // 2. Run forward dynamics to check if torque limits are violated at any waypoint.
@@ -177,7 +177,13 @@ bool IterativeTorqueLimitParameterization::computeTimeStampsWithTorqueLimits(
     }
   }
 
-  dynamics_solver::DynamicsSolver dynamics_solver(trajectory.getRobotModel(), group->getName(), gravity_vector);
+  dynamics_solver::DynamicsSolver dynamics_solver(trajectory.getRobotModel(), group->getName(), gravity_vector,
+                                                  tip_inertia.get_value_or(geometry_msgs::Inertia()));
+  if (!dynamics_solver.getGroup())
+  {
+    ROS_ERROR_NAMED(LOGNAME, "Dynamics solver failed to initialize for group '%s'", group->getName().c_str());
+    return false;
+  }
 
   // Copy the waypoints so we can modify them while iterating
   moveit_msgs::RobotTrajectory original_traj;

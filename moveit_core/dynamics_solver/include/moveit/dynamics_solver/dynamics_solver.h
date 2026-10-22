@@ -42,6 +42,7 @@
 #include <kdl/chainidsolver_recursive_newton_euler.hpp>
 
 #include <moveit/robot_state/robot_state.h>
+#include <geometry_msgs/Inertia.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Wrench.h>
 
@@ -69,6 +70,35 @@ public:
    */
   DynamicsSolver(const robot_model::RobotModelConstPtr& robot_model, const std::string& group_name,
                  const geometry_msgs::Vector3& gravity_vector);
+
+  /**
+   * @brief Initialize the dynamics solver with a rigid body fixed to the group's last link
+   * @param tip_inertia Mass, center of mass and inertia about the center of mass of a body
+   * rigidly attached to the group's last link, expressed in that link's frame (a payload or
+   * tool the URDF does not model). A zero mass attaches nothing.
+   */
+  DynamicsSolver(const robot_model::RobotModelConstPtr& robot_model, const std::string& group_name,
+                 const geometry_msgs::Vector3& gravity_vector, const geometry_msgs::Inertia& tip_inertia);
+
+  /** @brief One segment of the solver's chain: its link and the rigid-body inertia the solver
+   * uses for it, about the link frame's origin, in the link frame (any tip inertia included). */
+  struct SegmentInertia
+  {
+    std::string link_name;
+    geometry_msgs::Inertia inertia;
+  };
+
+  /**
+   * @brief Get every chain segment's inertia as the solver uses it, base to tip
+   * @return Empty if the solver failed to initialize
+   */
+  std::vector<SegmentInertia> getSegmentInertias() const;
+
+  /** @brief Name of the group's last link, where a tip inertia attaches */
+  const std::string& getTipLinkName() const
+  {
+    return tip_name_;
+  }
 
   /**
    * @brief Get the torques (the order of all input and output is the same
