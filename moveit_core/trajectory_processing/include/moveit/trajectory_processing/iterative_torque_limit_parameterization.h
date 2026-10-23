@@ -40,6 +40,8 @@
 #include <boost/optional.hpp>
 #include <unordered_map>
 
+#include <unordered_map>
+
 namespace trajectory_processing
 {
 class IterativeTorqueLimitParameterization

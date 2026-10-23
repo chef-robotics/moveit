@@ -28,7 +28,7 @@ find_package(catkin REQUIRED COMPONENTS
   rosconsole
 )
 
-find_package(PythonInterp REQUIRED)
+find_package(PythonInterp ${CHEF_FORCE_PYTHON_VERSION} REQUIRED)
 find_package(PythonLibs "${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}" REQUIRED)
 
 find_package(Boost REQUIRED)
@@ -46,8 +46,11 @@ find_package(Boost REQUIRED COMPONENTS
   system
   thread
 )
+
+
 find_package(Eigen3 REQUIRED)
 find_package(eigenpy REQUIRED)
+# TODO: probably need different eigenpy
 
 set(THIS_PACKAGE_INCLUDE_DIRS
   py_bindings_tools/include
@@ -58,13 +61,19 @@ set(THIS_PACKAGE_INCLUDE_DIRS
 )
 
 catkin_python_setup()
+# Set boost_python_component if needed
 
+if("${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" EQUAL "37")
+  set(Boost_PYTHON_LIBRARY "/usr/local/lib/libboost_python3.so")
+  set(Boost_LIBRARIES "${Boost_PYTHON_LIBRARY}")
+endif()
+link_directories("/usr/local/lib")
 catkin_package(
   LIBRARIES
     moveit_common_planning_interface_objects
     moveit_planning_scene_interface
     moveit_move_group_interface
-    moveit_py_bindings_tools
+    # moveit_py_bindings_tools_py${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}
     moveit_cpp
   INCLUDE_DIRS
     ${THIS_PACKAGE_INCLUDE_DIRS}
@@ -81,6 +90,8 @@ catkin_package(
   DEPENDS
     EIGEN3
 )
+
+list(REMOVE_ITEM catkin_LIBRARIES /usr/lib/x86_64-linux-gnu/libpython2.7.so)
 
 include_directories(${THIS_PACKAGE_INCLUDE_DIRS}
                     ${Boost_INCLUDE_DIRS}
