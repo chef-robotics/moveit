@@ -65,6 +65,12 @@ inline geometry_msgs::Vector3 transformVector(const Eigen::Isometry3d& transform
 
 DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_model, const std::string& group_name,
                                const geometry_msgs::Vector3& gravity_vector)
+  : DynamicsSolver(robot_model, group_name, gravity_vector, geometry_msgs::Inertia())
+{
+}
+
+DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_model, const std::string& group_name,
+                               const geometry_msgs::Vector3& gravity_vector, const geometry_msgs::Inertia& tip_inertia)
 {
   robot_model_ = robot_model;
   joint_model_group_ = robot_model_->getJointModelGroup(group_name);
@@ -119,6 +125,24 @@ DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_mode
   num_joints_ = kdl_chain_.getNrOfJoints();
   num_segments_ = kdl_chain_.getNrOfSegments();
 
+  if (tip_inertia.m > 0.0)
+  {
+    // KDL names each segment after its child link, so the chain's last segment is the tip link.
+    KDL::Segment& tip = kdl_chain_.segments.back();
+    if (tip.getName() != tip_name_)
+    {
+      ROS_ERROR_NAMED("dynamics_solver", "Chain ends at '%s', not the group's tip link '%s'; cannot attach the tip inertia",
+                      tip.getName().c_str(), tip_name_.c_str());
+      joint_model_group_ = nullptr;
+      return;
+    }
+    const KDL::Vector center_of_mass(tip_inertia.com.x, tip_inertia.com.y, tip_inertia.com.z);
+    const KDL::RotationalInertia inertia_about_com(tip_inertia.ixx, tip_inertia.iyy, tip_inertia.izz, tip_inertia.ixy,
+                                                   tip_inertia.ixz, tip_inertia.iyz);
+    tip.setInertia(tip.getInertia() + KDL::RigidBodyInertia(tip_inertia.m, center_of_mass, inertia_about_com));
+    ROS_DEBUG_NAMED("dynamics_solver", "Attached %.3f kg to tip link '%s'", tip_inertia.m, tip_name_.c_str());
+  }
+
   state_.reset(new robot_state::RobotState(robot_model_));
   state_->setToDefaultValues();
 
@@ -138,6 +162,36 @@ DynamicsSolver::DynamicsSolver(const robot_model::RobotModelConstPtr& robot_mode
   ROS_DEBUG_NAMED("dynamics_solver", "Gravity norm set to %f", gravity_);
 
   chain_id_solver_.reset(new KDL::ChainIdSolver_RNE(kdl_chain_, gravity));
+}
+
+std::vector<DynamicsSolver::SegmentInertia> DynamicsSolver::getSegmentInertias() const
+{
+  std::vector<SegmentInertia> segment_inertias;
+  if (!joint_model_group_)
+    return segment_inertias;
+  for (const KDL::Segment& segment : kdl_chain_.segments)
+  {
+    // A copy: KDL's RefPoint is not const.
+    KDL::RigidBodyInertia rigid_body = segment.getInertia();
+    const KDL::Vector center_of_mass = rigid_body.getCOG();
+    // KDL keeps the rotational inertia about the segment origin; report it about the center of mass,
+    // the URDF convention, so the numbers compare with the description.
+    const KDL::RotationalInertia about_com = rigid_body.RefPoint(center_of_mass).getRotationalInertia();
+    SegmentInertia entry;
+    entry.link_name = segment.getName();
+    entry.inertia.m = rigid_body.getMass();
+    entry.inertia.com.x = center_of_mass.x();
+    entry.inertia.com.y = center_of_mass.y();
+    entry.inertia.com.z = center_of_mass.z();
+    entry.inertia.ixx = about_com.data[0];
+    entry.inertia.ixy = about_com.data[1];
+    entry.inertia.ixz = about_com.data[2];
+    entry.inertia.iyy = about_com.data[4];
+    entry.inertia.iyz = about_com.data[5];
+    entry.inertia.izz = about_com.data[8];
+    segment_inertias.push_back(entry);
+  }
+  return segment_inertias;
 }
 
 bool DynamicsSolver::getTorques(const std::vector<double>& joint_angles, const std::vector<double>& joint_velocities,

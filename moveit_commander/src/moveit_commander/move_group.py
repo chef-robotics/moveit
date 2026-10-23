@@ -36,7 +36,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-from geometry_msgs.msg import Pose, PoseStamped, Vector3, Wrench
+from geometry_msgs.msg import Inertia, Pose, PoseStamped, Vector3, Wrench
 from moveit_msgs.msg import (
     RobotTrajectory,
     Grasp,
@@ -749,6 +749,7 @@ class MoveGroupCommander(object):
         min_angle_change=None,  # type: Optional[float]
         accel_limit_decrement_factor=None,  # type: Optional[float]
         max_iterations=None,  # type: Optional[int]
+        tip_inertia=None,  # type: Optional[Inertia]
     ):
         # type: (...) -> RobotTrajectory | None
         """
@@ -798,6 +799,10 @@ class MoveGroupCommander(object):
             max_iterations: Maximum number of iterations for ITLP; if not
                 specified, a default value is used. See ITLP docs for details
                 and default.
+            tip_inertia: A body fixed to the group's last link, in that
+                link's frame, that the torque computation (ITLP and the
+                injected efforts) includes on top of the robot model: a tool
+                or payload the URDF does not carry. Default: None
 
         Returns:
             Trajectory with time parameterization applied, if parameterization
@@ -817,6 +822,10 @@ class MoveGroupCommander(object):
                 conversions.msg_to_string(w) for w in external_link_wrenches
             ]
 
+        ser_tip_inertia = None
+        if tip_inertia is not None:
+            ser_tip_inertia = conversions.msg_to_string(tip_inertia)
+
         ser_traj_out = self._g.retime_trajectory(
             ser_ref_state_in,
             ser_traj_in,
@@ -834,6 +843,7 @@ class MoveGroupCommander(object):
             min_angle_change,
             accel_limit_decrement_factor,
             max_iterations,
+            ser_tip_inertia,
         )
         traj_out = RobotTrajectory()
         try:
@@ -850,6 +860,7 @@ class MoveGroupCommander(object):
         traj_in,  # type: RobotTrajectory
         gravity_vector=None,  # type: Optional[Vector3]
         external_link_wrenches=None,  # type: Optional[List[Wrench]]
+        tip_inertia=None,  # type: Optional[Inertia]
     ):
         # type: (...) -> RobotTrajectory
         """
@@ -863,6 +874,9 @@ class MoveGroupCommander(object):
             external_link_wrenches: External forces on links; the number of
                 wrenches must match the number of links in the robot model.
                 Zero external wrenches if not specified. Default: None
+            tip_inertia: A body fixed to the group's last link, in that
+                link's frame, included on top of the robot model.
+                Default: None
 
         Returns:
             Trajectory with torques injected into the `effort` field.
@@ -879,14 +893,46 @@ class MoveGroupCommander(object):
                 conversions.msg_to_string(w) for w in external_link_wrenches
             ]
 
+        ser_tip_inertia = None
+        if tip_inertia is not None:
+            ser_tip_inertia = conversions.msg_to_string(tip_inertia)
+
         ser_traj_out = self._g.inject_trajectory_torques(
             ser_traj_in,
             ser_gravity_vector,
             ser_external_link_wrenches,
+            ser_tip_inertia,
         )
         traj_out = RobotTrajectory()
         traj_out.deserialize(ser_traj_out)
         return traj_out
+
+    def describe_dynamics(self, gravity_vector=None, tip_inertia=None):
+        # type: (Optional[Vector3], Optional[Inertia]) -> dict
+        """
+        Describe the chain the dynamics solver computes torques with.
+
+        Args:
+            gravity_vector: Gravity w.r.t. robot model base frame;
+                zero gravity if not specified. Default: None
+            tip_inertia: A body fixed to the group's last link, in that
+                link's frame, included on top of the robot model.
+                Default: None
+
+        Returns:
+            A dict with `tip_link` and `segments`: one dict per chain
+            segment, base to tip, with `link`, `mass` (kg), `com`
+            ([x, y, z] in the link frame, m) and `inertia` about the
+            center of mass ([ixx, iyy, izz, ixy, ixz, iyz], kg m^2).
+            `segments` is empty if the solver cannot initialize.
+        """
+        ser_gravity_vector = None
+        if gravity_vector is not None:
+            ser_gravity_vector = conversions.msg_to_string(gravity_vector)
+        ser_tip_inertia = None
+        if tip_inertia is not None:
+            ser_tip_inertia = conversions.msg_to_string(tip_inertia)
+        return self._g.describe_dynamics(ser_gravity_vector, ser_tip_inertia)
 
     def get_jacobian_matrix(self, joint_values, reference_point=None):
         """Get the jacobian matrix of the group as a list"""
